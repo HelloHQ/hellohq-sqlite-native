@@ -50,16 +50,25 @@ their own suites). It tests that **our build produces a correct artifact**:
       x86_64 slice is produced by CI's native `macos-13` leg (no local cross-build).
 
 ## Milestone 2 — All 5 platforms
-- [ ] Linux x64 (+ arm64): OpenSSL, nightly Rust
-- [ ] Windows x64: MSVC SQLCipher + cr-sqlite — **hardest; crypto provider TBD (OpenSSL vs CNG)**
-- [ ] Android arm64-v8a / armeabi-v7a / x86_64 (NDK)
-- [ ] iOS device arm64 + sim → xcframework (CommonCrypto)
-- [ ] pin `rust-toolchain.toml` (nightly) for cr-sqlite everywhere
+All legs have a build script + a CI job (below); the macOS legs are validated,
+the rest are **first-draft recipes pending CI iteration on their real runners**.
+- [~] Linux x64: `build/build-linux.sh` (OpenSSL, nightly Rust) — draft
+- [~] Windows x64: `build/build-windows.ps1` (MSVC + OpenSSL/vcpkg) — draft, **hardest**
+- [~] Android arm64-v8a / armeabi-v7a / x86_64: `build/build-android.sh` (NDK) — draft;
+      **OpenSSL-per-ABI provisioning still TODO**
+- [~] iOS device arm64 + sim → xcframework: `build/build-ios.sh` (CommonCrypto) — draft
+- [x] cr-sqlite nightly pin handled by `build/setup-rust.sh` (reads the channel
+      from cr-sqlite's own `rust-toolchain.toml` → never drifts) + `-Zbuild-std`
+      crosses via the Makefile's `IOS_TARGET`/`ANDROID_TARGET`.
 
 ## Milestone 3 — CI + supply chain (public repo → free runners)
-- [ ] `.github/workflows/build.yml` — 5-platform matrix → fetch+build → `test/contract.c` → artifacts
-- [ ] Scans: CodeQL (C/Rust), cargo-deny + cargo-audit (+ license gate), OSV-Scanner, Trivy, Harden-Runner, OSSF Scorecard; pin Actions to SHA
-- [ ] SLSA build provenance (attest-build-provenance) + sha256 checksums + SBOM (syft)
+- [x] `.github/workflows/build.yml` — 5-platform matrix → fetch+build → contract →
+      artifacts; macOS universal via `lipo-macos.sh` (native arm64 + x86_64 legs)
+- [x] `.github/workflows/security.yml` — CodeQL (C/Rust), cargo-deny + cargo-audit,
+      OSV-Scanner, Trivy, Harden-Runner (every job), OSSF Scorecard
+- [x] SLSA build provenance (attest-build-provenance) + SHA256SUMS + SBOM (syft) in
+      the `provenance` job
+- [ ] **pin every `uses:` to a commit SHA** (Scorecard flags; tags used during bring-up)
 - [ ] assemble `THIRD_PARTY_LICENSES` at build
 
 ## Milestone 4 — Release + currency

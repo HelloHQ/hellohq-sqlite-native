@@ -1,0 +1,212 @@
+# build.yml — 5-platform native build matrix for the HelloHQ encrypted + CRDT
+# SQLite layer (SQLCipher + cr-sqlite). Each leg: fetch+verify pinned upstream →
+# build → run the capability contract (test/contract.c) → upload the artifact.
+# A combine job lipos the two macOS arches into a universal binary, and a final
+# job attaches SHA-256 checksums + an SBOM + SLSA build provenance.
+#
+# Validated locally: the macOS legs (build-macos.sh + lipo-macos.sh + contract,
+# 9/9 green). The Linux/Windows/Android/iOS legs are first-draft recipes that
+# will need iteration on their real runners — they are gated by the same contract
+# test, so a broken build fails loudly rather than shipping.
+#
+# ⚠️ SUPPLY CHAIN TODO before production: pin every `uses:` to a full commit SHA
+#    (OSSF Scorecard / security.yml enforces this). Tags are used here for
+#    readability during bring-up.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:   # so release.yml can reuse this matrix
+
+permissions:
+  contents: read
+
+jobs:
+  # ── macOS: one native job per arch (no cross-compile; cr-sqlite -Zbuild-std) ─
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64,  runner: macos-14 }   # Apple Silicon
+          - { arch: x86_64, runner: macos-13 }   # Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - name: Fetch + verify pinned upstream
+        run: bash build/fetch.sh
+      - name: Setup Rust (cr-sqlite pinned nightly + rust-src)
+        run: bash build/setup-rust.sh
+      - name: Build (CommonCrypto) + contract test
+        run: bash build/build-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/macos-${{ matrix.arch }}/*.dylib
+
+  macos-universal:
+    needs: macos
+    runs-on: macos-14
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: macos-arm64,  path: dist/macos-arm64 }
+      - uses: actions/download-artifact@v4
+        with: { name: macos-x86_64, path: dist/macos-x86_64 }
+      - name: Fuse universal binaries
+        run: bash build/lipo-macos.sh
+      - name: Fetch sources + contract test (universal artifact)
+        run: |
+          bash build/fetch.sh
+          CC="$(xcrun -f clang)"
+          "$CC" -O2 -I.src/sqlcipher test/contract.c \
+            -Ldist/macos -lsqlcipher -Wl,-rpath,@loader_path -Wl,-rpath,"$PWD/dist/macos" \
+            -o dist/macos/contract
+          rm -f /tmp/hq-uni.db
+          dist/macos/contract dist/macos/crsqlite.dylib /tmp/hq-uni.db
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: dist/macos/*.dylib
+
+  # ── Linux x86_64 ────────────────────────────────────────────────────────────
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang make tcl libssl-dev patchelf
+      - name: Fetch + verify pinned upstream
+        run: bash build/fetch.sh
+      - name: Setup Rust
+        run: bash build/setup-rust.sh
+      - name: Build + contract test
+        run: bash build/build-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: dist/linux-x64/*.so
+
+  # ── Windows x86_64 (MSVC + OpenSSL via vcpkg) ───────────────────────────────
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1          # x64 MSVC developer environment
+      - name: Install OpenSSL (vcpkg)
+        run: vcpkg install openssl:x64-windows
+      - name: Fetch + verify pinned upstream
+        shell: bash
+        run: bash build/fetch.sh
+      - name: Setup Rust
+        shell: bash
+        run: bash build/setup-rust.sh x86_64-pc-windows-msvc
+      - name: Build + contract test
+        shell: pwsh
+        env:
+          OPENSSL_ROOT: C:/vcpkg/installed/x64-windows
+        run: pwsh build/build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/windows-x64/*.dll
+
+  # ── iOS (device arm64 + simulator) → xcframework ────────────────────────────
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - name: Fetch + verify pinned upstream
+        run: bash build/fetch.sh
+      - name: Setup Rust (+ apple-ios targets)
+        run: bash build/setup-rust.sh aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+      - name: Build xcframeworks
+        run: bash build/build-ios.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: dist/ios
+
+  # ── Android (arm64-v8a, armeabi-v7a, x86_64) ────────────────────────────────
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with: { ndk-version: r26d }
+      - name: Provision OpenSSL per ABI
+        # TODO(M2): build/fetch prebuilt OpenSSL static libs per ABI into
+        # $OPENSSL_ANDROID/<abi>/{include,lib}. Placeholder until that lands.
+        run: |
+          echo "::warning::OpenSSL-per-ABI provisioning not yet implemented"
+          mkdir -p "${RUNNER_TEMP}/openssl-android"
+      - name: Fetch + verify pinned upstream
+        run: bash build/fetch.sh
+      - name: Setup Rust (+ android targets)
+        run: bash build/setup-rust.sh aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: Build per-ABI
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          OPENSSL_ANDROID: ${{ runner.temp }}/openssl-android
+        run: bash build/build-android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/android
+
+  # ── Provenance: checksums + SBOM + SLSA attestation over all artifacts ──────
+  provenance:
+    needs: [macos-universal, linux, windows, ios, android]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write        # SLSA provenance signing
+      attestations: write
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: Flatten + checksum
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) \
+            -exec cp {} release/ \; 2>/dev/null || true
+          # xcframeworks are directories — archive them whole.
+          for fw in artifacts/ios/*.xcframework; do
+            [ -d "$fw" ] && (cd "$(dirname "$fw")" && zip -qr "$OLDPWD/release/$(basename "$fw").zip" "$(basename "$fw")")
+          done
+          cd release && shasum -a 256 * > SHA256SUMS && cat SHA256SUMS
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          path: release
+          output-file: release/sbom.spdx.json
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: release/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: release
