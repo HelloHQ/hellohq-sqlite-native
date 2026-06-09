@@ -1,0 +1,97 @@
+# release.yml — cut a tagged Release of the native DB layer.
+#
+# Triggered by a `v*` tag. Reuses build.yml (workflow_call) to build + contract-
+# test all platforms from the tagged commit, then packages per-platform archives
+# (libs + THIRD_PARTY_LICENSES), writes SHA256SUMS, attaches an SBOM, attests SLSA
+# build provenance over the archives, and publishes the GitHub Release.
+#
+# Consumers (hellohq_db) verify the SHA-256 + `gh attestation verify` before use,
+# then run their own contract suite — so a bad release can't reach production.
+#
+# Tag scheme: encode the upstream pin, e.g. `v4.16.0-1` (SQLCipher version +
+# build revision). The tag string becomes the release version verbatim.
+#
+# ⚠️ SHA-pin every `uses:` before production (tracked in ROADMAP / Scorecard).
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v4.16.0-1)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build + contract-test every platform from the tagged commit.
+  build:
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create the Release
+      id-token: write      # SLSA provenance signing
+      attestations: write
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with: { path: artifacts }
+
+      - name: Assemble THIRD_PARTY_LICENSES
+        run: |
+          bash build/fetch.sh
+          bash build/third-party-licenses.sh
+
+      - name: Package per-platform archives + SHA256SUMS
+        run: bash build/package-release.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Generate SBOM (syft) over the release set
+        uses: anchore/sbom-action@v0
+        with:
+          path: release
+          output-file: release/sbom.spdx.json
+
+      - name: Attest build provenance (release archives)
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            release/*.tar.gz
+            release/*.zip
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*.tar.gz
+            release/*.zip
+            release/SHA256SUMS
+            release/sbom.spdx.json
+            release/THIRD_PARTY_LICENSES.txt

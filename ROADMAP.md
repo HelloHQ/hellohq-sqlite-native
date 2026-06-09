@@ -72,7 +72,12 @@ the rest are **first-draft recipes pending CI iteration on their real runners**.
 - [ ] assemble `THIRD_PARTY_LICENSES` at build
 
 ## Milestone 4 — Release + currency
-- [ ] tagged Releases: per-platform archives (`libsqlcipher.*` + `crsqlite.*` + checksums + attestation + licenses)
+- [x] tagged Releases: `.github/workflows/release.yml` (on `v*`) reuses build.yml,
+      packages per-platform archives (libs + `THIRD_PARTY_LICENSES`) via
+      `build/package-release.sh`, writes SHA256SUMS, attaches an SBOM, attests SLSA
+      provenance over the archives, and publishes via softprops/action-gh-release.
+      `build/third-party-licenses.sh` assembles the license bundle from `.src/`.
+      Packaging path verified locally on the macOS artifact.
 - [ ] upstream-tracking cron: weekly check → PR bumping `upstream.lock` → build+scan+contract gate → **human approval** (crypto/DB bumps never auto-merge)
 
 ## Open decisions
