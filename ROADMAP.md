@@ -6,10 +6,16 @@ Consumers load `libsqlcipher` as their `sqlite3` and load `crsqlite` per
 connection after `PRAGMA key` (see README).
 
 ## Validated (host, macOS arm64)
-- SQLCipher v4.16.0 builds via autosetup `configure` (+ `SQLITE_EXTRA_INIT`).
+- SQLCipher v4.16.0 builds via autosetup `configure` (+ `SQLITE_EXTRA_INIT`),
+  **CommonCrypto codec** — the shipped `libsqlcipher.dylib` links only system
+  frameworks (Security, CoreFoundation, libz, libSystem); **no OpenSSL**, so it
+  loads on any mac. (`-DSQLCIPHER_CRYPTO_CC`; verified with `otool -L`.)
 - superfly cr-sqlite builds (`make loadable`); requires **nightly Rust**.
-- Combined on an encrypted DB: cipher active, CRR changeset round-trip,
-  encrypted on disk.
+- Combined on an encrypted DB: cipher active, key round-trip, wrong-key rejected,
+  rekey, cr-sqlite loads, CRR changeset round-trip (9/9 in `test/contract.c`).
+- **Universal**: `libsqlcipher` cross-builds arm64+x86_64 and lipos clean; the
+  cr-sqlite x86_64 slice needs a **native x86_64 runner** (its `build-std`
+  toolchain can't cross-compile) — produced in CI on `macos-13`.
 
 ## Artifact contract (loadable path)
 Per platform, two libraries:
@@ -35,10 +41,13 @@ their own suites). It tests that **our build produces a correct artifact**:
 ## Milestone 1 — Formalize the host build  ◀ done
 - [x] `upstream.lock` with commit-SHA verification (SQLCipher v4.16.0, superfly cr-sqlite)
 - [x] `build/fetch.sh` — fetch + verify pinned upstream into `.src/`
-- [x] `build/build-macos.sh` — validated recipe → `dist/macos/{libsqlcipher,crsqlite}.dylib`
-- [x] `test/contract.c` — capability checklist, run after the macOS build
-- [ ] universal macOS (arm64 + x86_64 via lipo)
-- [ ] crypto provider decision: OpenSSL (validated) → CommonCrypto on Apple
+- [x] `build/build-macos.sh` — per-arch recipe → `dist/macos-<arch>/{libsqlcipher,crsqlite}.dylib`
+- [x] `test/contract.c` — capability checklist, run after the macOS build (9/9 green)
+- [x] crypto provider: **CommonCrypto** — self-contained `libsqlcipher` (no OpenSSL)
+- [x] universal via lipo: `build/lipo-macos.sh` fuses the per-arch dirs →
+      `dist/macos/{libsqlcipher,crsqlite}.dylib`. `libsqlcipher` verified universal
+      (`x86_64 arm64`) + contract green against the fused artifact. The cr-sqlite
+      x86_64 slice is produced by CI's native `macos-13` leg (no local cross-build).
 
 ## Milestone 2 — All 5 platforms
 - [ ] Linux x64 (+ arm64): OpenSSL, nightly Rust

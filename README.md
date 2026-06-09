@@ -48,18 +48,32 @@ SHA-256 and build attestation before use.
 Bumping = edit `upstream.lock`; the build + security scan + contract gate runs on
 the PR. Crypto/DB bumps require human approval — never auto-merged.
 
-## Build (host, macOS arm64 — verified)
+## Build (macOS — verified)
 
 ```sh
-bash build/fetch.sh        # fetch + verify pinned upstream into .src/
-bash build/build-macos.sh  # -> dist/macos/{libsqlcipher,crsqlite}.dylib + contract test
+bash build/fetch.sh                  # fetch + verify pinned upstream into .src/
+bash build/build-macos.sh            # host arch -> dist/macos-<arch>/ + contract test
+ARCH=x86_64 bash build/build-macos.sh # other slice (native runner; see note)
+bash build/lipo-macos.sh             # fuse -> dist/macos/{libsqlcipher,crsqlite}.dylib
 ```
 
 SQLCipher v4.16.0 uses the autosetup `configure`; required flags:
 `--with-tempstore=yes`, `-DSQLITE_HAS_CODEC`,
 `-DSQLITE_EXTRA_INIT=sqlcipher_extra_init`,
 `-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown`, plus a crypto provider.
-cr-sqlite requires a **nightly Rust** toolchain.
+
+**Crypto provider: CommonCrypto** (`-DSQLCIPHER_CRYPTO_CC` + `-framework
+Security`). The result links only system frameworks — `otool -L` shows no
+OpenSSL — so the artifact is self-contained and loads on any mac. Builds use
+Apple clang via `xcrun` (the PATH `clang` may be Homebrew LLVM, which can't link
+the macOS SDK for a non-host arch). cr-sqlite requires a **nightly Rust**
+toolchain.
+
+**Universal:** each arch is built natively on its own runner (arm64 on
+`macos-14`, x86_64 on `macos-13`) and fused by `build/lipo-macos.sh`. A single
+arm64 host can cross-build `libsqlcipher` for x86_64, but **cr-sqlite cannot
+cross-compile** (its `build-std` toolchain needs the target's std), so a true
+universal `crsqlite.dylib` is produced in CI, not locally.
 
 ## Testing
 
