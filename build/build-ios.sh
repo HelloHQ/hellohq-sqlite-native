@@ -33,7 +33,8 @@ build_sqlcipher_slice() { # <sdk> <arch> <min-flag> <out.a>
   local sysroot; sysroot="$(xcrun --sdk "${sdk}" --show-sdk-path)"
   ( cd "${SRC}/sqlcipher"
     make clean >/dev/null 2>&1 || true
-    ./configure --with-tempstore=yes \
+    # --disable-math: skip autosetup's libm run-probe (fails under cross-compile).
+    ./configure --with-tempstore=yes --disable-math \
       CC="${CC}" \
       CFLAGS="-arch ${arch} -isysroot ${sysroot} ${minflag} -O2 ${CC_DEFS}" \
       LDFLAGS="-arch ${arch} -isysroot ${sysroot} -framework Security -framework CoreFoundation" >/dev/null

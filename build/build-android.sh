@@ -51,7 +51,10 @@ build_abi() {
   # SQLCipher — static-link libcrypto so the .so is self-contained on device.
   ( cd "${SRC}/sqlcipher"
     make clean >/dev/null 2>&1 || true
-    ./configure --with-tempstore=yes \
+    # --disable-math: autosetup's libm run-probe fails when cross-compiling
+    # (can't exec the target test binary); we don't use SQLite's math SQL
+    # functions, so skip the probe rather than wrongly linking the host libm.
+    ./configure --with-tempstore=yes --disable-math \
       CC="${cc}" \
       CFLAGS="-O2 -fPIC -DSQLITE_HAS_CODEC -DSQLITE_TEMP_STORE=2 \
               -DSQLITE_EXTRA_INIT=sqlcipher_extra_init \

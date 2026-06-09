@@ -35,20 +35,31 @@ PY
 }
 
 clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha>
-  local name="$1" url="$2" ref="$3" pinned="$4"
+  local name="$1" url="$2" ref="$3" pinned="$4"  # ref is unused (we pin by SHA)
   local dir="${SRC}/${name}"
-  echo "▸ ${name}: ${url} @ ${ref} (pin ${pinned:0:12})"
+  echo "▸ ${name}: ${url} @ ${pinned:0:12}"
   rm -rf "${dir}"
-  git clone --depth 1 ${ref:+--branch "${ref}"} "${url}" "${dir}" >/dev/null 2>&1 || \
-    git clone "${url}" "${dir}" >/dev/null 2>&1
-  git -C "${dir}" fetch --depth 1 origin "${pinned}" >/dev/null 2>&1 || true
-  git -C "${dir}" checkout -q "${pinned}" 2>/dev/null || true
+  # Fetch exactly the pinned commit (GitHub allows fetching an arbitrary SHA),
+  # then check it out. No fallbacks that could leave us on the wrong commit.
+  git init -q "${dir}"
+  git -C "${dir}" remote add origin "${url}"
+  git -C "${dir}" fetch -q --depth 1 origin "${pinned}"
+  git -C "${dir}" checkout -q FETCH_HEAD
   local got; got="$(git -C "${dir}" rev-parse HEAD)"
   if [ "${got}" != "${pinned}" ]; then
     echo "❌ ${name}: commit mismatch — got ${got}, pinned ${pinned}" >&2
     exit 1
   fi
-  git -C "${dir}" submodule update --init --recursive >/dev/null 2>&1 || true
+  # Submodules (cr-sqlite → sqlite-rs-embedded → sqlite_nostd). NOT masked: an
+  # empty submodule tree must fail the fetch, not silently break the build later.
+  # cr-sqlite's .gitmodules use SSH URLs (git@github.com:…) which fail on CI
+  # (token/HTTPS only); rewrite to HTTPS. `-c` propagates to every nested clone
+  # via GIT_CONFIG_PARAMETERS. Full (non-shallow) so a pinned non-tip commit
+  # always resolves.
+  git -C "${dir}" \
+    -c url."https://github.com/".insteadOf="git@github.com:" \
+    -c url."https://github.com/".insteadOf="ssh://git@github.com/" \
+    submodule update --init --recursive
   echo "  ✅ verified ${got}"
 }
 
