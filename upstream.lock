@@ -1,0 +1,29 @@
+# upstream.lock — pinned upstream sources for the combined SQLCipher + cr-sqlite
+# native library. The CI build FETCHES these at build time, verifies them, then
+# compiles. No upstream source is vendored into this repo — only these pins, the
+# build scripts, and any *.patch files live here.
+#
+# Bumping an upstream = edit a value below. The build + security-scan + contract
+# gate runs on the PR. Crypto/DB bumps require human approval (never auto-merge).
+#
+# sha256/signature are verified in CI before the source is used.
+
+sqlcipher:
+  source: https://github.com/sqlcipher/sqlcipher
+  tag:    v4.16.0
+  # SQLCipher is distributed via git (no stable signed tarball). Verification =
+  # the resolved commit of the tag must equal this immutable SHA.
+  commit: e2a6040f2ae5cfff2b3e08eb3320007d93cdf3fc
+
+crsqlite:
+  source: https://github.com/superfly/cr-sqlite
+  # The superfly fork publishes no release tags — pin the exact commit.
+  ref:    HEAD
+  commit: 3133cacac0177ff11a2022a5ebd08f17749559f5
+
+# Crypto provider for SQLCipher (per platform):
+#   Apple (iOS/macOS) → CommonCrypto (system; no bundled lib, no extra license)
+#   Android/Linux/Windows → OpenSSL 3.x (Apache-2.0; bundle its license)
+crypto_provider:
+  apple:   commoncrypto
+  other:   openssl-3

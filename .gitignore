@@ -1,0 +1,22 @@
+# Fetched upstream source (never committed — pinned in upstream.lock, fetched at build)
+/.src/
+/build/_work/
+/sqlcipher/
+/cr-sqlite/
+
+# Build outputs / distributable binaries (published via Releases, not committed)
+/dist/
+/out/
+*.dylib
+*.so
+*.dll
+*.a
+*.xcframework
+*.framework
+
+# Generated license bundle (assembled at build from fetched sources)
+/THIRD_PARTY_LICENSES/generated/
+
+# OS / tooling
+.DS_Store
+/.dart_tool/
