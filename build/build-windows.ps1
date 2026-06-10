@@ -61,27 +61,9 @@ try {
 Get-ChildItem -Path (Join-Path $OpenSslRoot 'bin') -Filter 'libcrypto*.dll' -ErrorAction SilentlyContinue |
   ForEach-Object { Copy-Item $_.FullName $Out -Force }
 
-# ── 2. cr-sqlite → crsqlite.dll (loadable extension; nightly Rust) ───────────
-Write-Host '▸ building cr-sqlite (loadable extension; Rust nightly)'
-Push-Location (Join-Path $Src 'cr-sqlite/core')
-try {
-  # The Makefile is POSIX; on Windows build the loadable crate directly.
-  cargo build --release --target x86_64-pc-windows-msvc
-  $built = Get-ChildItem -Recurse -Path 'rs' -Filter 'crsqlite.dll' -ErrorAction SilentlyContinue |
-           Select-Object -First 1
-  if (-not $built) { $built = Get-ChildItem -Recurse -Filter '*crsql*.dll' | Select-Object -First 1 }
-  Copy-Item $built.FullName (Join-Path $Out 'crsqlite.dll') -Force
-} finally { Pop-Location }
-
-# ── 3. Contract test ─────────────────────────────────────────────────────────
-Write-Host '▸ contract test (test/contract.c)'
-$contract = Join-Path $Out 'contract.exe'
-cl /O2 /I (Join-Path $Src 'sqlcipher') (Join-Path $Root 'test/contract.c') `
-   /Fe:$contract /link /LIBPATH:$Out sqlcipher.lib
-$dbPath = Join-Path $env:TEMP 'hq-native-contract.db'
-Remove-Item $dbPath -ErrorAction SilentlyContinue
-& $contract (Join-Path $Out 'crsqlite.dll') $dbPath
-if ($LASTEXITCODE -ne 0) { throw "contract test failed ($LASTEXITCODE)" }
-
-Write-Host "✅ Windows x64 artifacts in $Out"
+# cr-sqlite (crsqlite.dll) is built separately by build/build-windows-crsqlite.sh
+# on a Linux runner via mingw cross — cr-sqlite's own recipe, since native
+# Windows cr-sqlite is unsupported upstream. The `windows` job combines the two
+# and runs the contract test.
+Write-Host "✅ SQLCipher Windows x64 artifacts in $Out"
 Get-ChildItem $Out | Format-Table Name, Length

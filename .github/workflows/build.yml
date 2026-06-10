@@ -69,8 +69,10 @@ jobs:
           name: linux-x64
           path: dist/linux-x64/*.so
 
-  # ── Windows x86_64 (MSVC + OpenSSL via vcpkg) ───────────────────────────────
-  windows:
+  # ── Windows x86_64 — split build (cr-sqlite can't build natively on Windows) ─
+  # SQLCipher: MSVC on windows-latest. cr-sqlite: mingw cross from Linux (its own
+  # recipe). The `windows` job combines them + runs the contract test.
+  windows-sqlcipher:
     runs-on: windows-latest
     steps:
       - uses: step-security/harden-runner@v2
@@ -82,14 +84,61 @@ jobs:
       - name: Fetch + verify pinned upstream
         shell: bash
         run: bash build/fetch.sh
-      - name: Setup Rust
-        shell: bash
-        run: bash build/setup-rust.sh x86_64-pc-windows-msvc
-      - name: Build + contract test
+      - name: Build SQLCipher (MSVC)
         shell: pwsh
         env:
           OPENSSL_ROOT: C:/vcpkg/installed/x64-windows
         run: pwsh build/build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-sqlcipher
+          path: dist/windows-x64/*
+
+  windows-crsqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+      - name: Fetch + verify pinned upstream
+        run: bash build/fetch.sh
+      - name: Setup Rust (+ windows-gnu target)
+        run: bash build/setup-rust.sh x86_64-pc-windows-gnu
+      - name: Build cr-sqlite (mingw cross)
+        run: bash build/build-windows-crsqlite.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-crsqlite
+          path: dist/windows-x64/crsqlite.dll
+
+  windows:
+    needs: [windows-sqlcipher, windows-crsqlite]
+    runs-on: windows-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/download-artifact@v4
+        with: { name: win-sqlcipher, path: dist/windows-x64 }
+      - uses: actions/download-artifact@v4
+        with: { name: win-crsqlite, path: dist/windows-x64 }
+      - name: Fetch sources (for contract.c headers)
+        shell: bash
+        run: bash build/fetch.sh
+      - name: Contract test
+        shell: pwsh
+        run: |
+          $out = "dist/windows-x64"
+          cl /O2 /I .src/sqlcipher test/contract.c /Fe:$out/contract.exe `
+             /link /LIBPATH:$out sqlcipher.lib
+          $env:PATH = "$PWD/$out;$env:PATH"   # find sqlcipher.dll + libcrypto*.dll
+          $db = Join-Path $env:TEMP 'hq-win-contract.db'
+          Remove-Item $db -ErrorAction SilentlyContinue
+          & "$out/contract.exe" "$out/crsqlite.dll" $db
+          if ($LASTEXITCODE -ne 0) { throw "contract failed ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
