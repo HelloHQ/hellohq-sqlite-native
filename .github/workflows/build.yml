@@ -111,7 +111,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: win-crsqlite
-          path: dist/windows-x64/crsqlite.dll
+          path: dist/windows-x64/*.dll   # crsqlite.dll + bundled mingw runtime
 
   windows:
     needs: [windows-sqlcipher, windows-crsqlite]
@@ -131,13 +131,15 @@ jobs:
       - name: Contract test
         shell: pwsh
         run: |
-          $out = "dist/windows-x64"
-          cl /O2 /I .src/sqlcipher test/contract.c /Fe:$out/contract.exe `
-             /link /LIBPATH:$out sqlcipher.lib
-          $env:PATH = "$PWD/$out;$env:PATH"   # find sqlcipher.dll + libcrypto*.dll
+          # Absolute paths: PowerShell's & won't run a relative forward-slash path.
+          $out = Join-Path $PWD 'dist\windows-x64'
+          cl /O2 /I .src\sqlcipher test\contract.c /Fe:"$out\contract.exe" `
+             /link /LIBPATH:"$out" sqlcipher.lib
+          if ($LASTEXITCODE -ne 0) { throw "cl failed ($LASTEXITCODE)" }
+          $env:PATH = "$out;$env:PATH"   # sqlcipher.dll + libcrypto*.dll + mingw runtime
           $db = Join-Path $env:TEMP 'hq-win-contract.db'
           Remove-Item $db -ErrorAction SilentlyContinue
-          & "$out/contract.exe" "$out/crsqlite.dll" $db
+          & "$out\contract.exe" "$out\crsqlite.dll" $db
           if ($LASTEXITCODE -ne 0) { throw "contract failed ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v4
         with:
