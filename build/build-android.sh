@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # build-android.sh — build the HelloHQ native DB layer for Android, per ABI:
 #   dist/android/<abi>/libsqlcipher.so   (SQLCipher = the sqlite3 library)
-#   dist/android/<abi>/crsqlite.so       (cr-sqlite loadable extension)
+#   dist/android/<abi>/libcrsqlite.so    (cr-sqlite loadable extension; lib* for
+#                                         Android/Gradle jniLibs packaging)
 # ABIs: arm64-v8a · armeabi-v7a · x86_64   (jniLibs layout)
 #
 # Crypto provider: **OpenSSL** (Android has no CommonCrypto). Per-ABI prebuilt
@@ -72,7 +73,9 @@ build_abi() {
     make clean >/dev/null 2>&1 || true
     ANDROID_TARGET="${rust}" ANDROID_NDK_HOME="${ANDROID_NDK_HOME}" \
       NDK_HOSTARCH=linux-x86_64 make loadable >/dev/null )
-  cp "${SRC}/cr-sqlite/core/dist/crsqlite.so" "${out}/crsqlite.so"
+  # Android requires lib*.so naming (Gradle only packages/extracts lib*.so into
+  # the APK's jniLibs), and the consumer dlopens it by name. Ship libcrsqlite.so.
+  cp "${SRC}/cr-sqlite/core/dist/crsqlite.so" "${out}/libcrsqlite.so"
 }
 
 for abi in arm64-v8a armeabi-v7a x86_64; do build_abi "${abi}"; done
