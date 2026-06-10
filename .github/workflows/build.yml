@@ -125,15 +125,14 @@ jobs:
         with: { name: win-sqlcipher, path: dist/windows-x64 }
       - uses: actions/download-artifact@v4
         with: { name: win-crsqlite, path: dist/windows-x64 }
-      - name: Fetch sources (for contract.c headers)
-        shell: bash
-        run: bash build/fetch.sh
       - name: Contract test
         shell: pwsh
         run: |
           # Absolute paths: PowerShell's & won't run a relative forward-slash path.
+          # sqlite3.h ships in the win-sqlcipher artifact (it's generated, not in
+          # the raw source), so include from $out.
           $out = Join-Path $PWD 'dist\windows-x64'
-          cl /O2 /I .src\sqlcipher test\contract.c /Fe:"$out\contract.exe" `
+          cl /O2 /I "$out" test\contract.c /Fe:"$out\contract.exe" `
              /link /LIBPATH:"$out" sqlcipher.lib
           if ($LASTEXITCODE -ne 0) { throw "cl failed ($LASTEXITCODE)" }
           $env:PATH = "$out;$env:PATH"   # sqlcipher.dll + libcrypto*.dll + mingw runtime

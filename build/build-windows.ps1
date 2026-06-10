@@ -55,6 +55,9 @@ try {
     "LTLIBS=libcrypto.lib"
   Copy-Item 'sqlcipher.dll' (Join-Path $Out 'sqlcipher.dll') -Force
   if (Test-Path 'sqlcipher.lib') { Copy-Item 'sqlcipher.lib' (Join-Path $Out 'sqlcipher.lib') -Force }
+  # Ship the GENERATED amalgamation header so the combine job's contract test can
+  # compile against it (sqlite3.h does not exist in the raw fetched source).
+  Copy-Item 'sqlite3.h' (Join-Path $Out 'sqlite3.h') -Force
 } finally { Pop-Location }
 
 # Bundle the OpenSSL runtime DLL next to ours (consumers load it from the dir).
