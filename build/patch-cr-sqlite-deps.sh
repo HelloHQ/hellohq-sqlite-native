@@ -24,7 +24,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUNDLE="${ROOT}/.src/cr-sqlite/core/rs/bundle/Cargo.toml"
+BUNDLE_DIR="${ROOT}/.src/cr-sqlite/core/rs/bundle"
+BUNDLE="${BUNDLE_DIR}/Cargo.toml"
+LOCK="${BUNDLE_DIR}/Cargo.lock"
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "⚠️  patch-cr-sqlite-deps: cargo not found — skipping (no Rust build here)" >&2
@@ -40,6 +42,20 @@ fi
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
 
 echo "▸ patch-cr-sqlite-deps: clearing RUSTSEC-2026-0007 (bytes), RUSTSEC-2024-0006 (shlex)"
+
+# The runner's stable cargo may rewrite the lock to format v4; the cargo-deny
+# action's older bundled cargo only parses v3 (cargo-audit tolerates v4). Capture
+# upstream's lockfile format version and restore it after the bump — the dep
+# changes are version-agnostic, so re-tagging the format is safe (verified with a
+# `--locked` parse on the old toolchain).
+orig_ver="$(sed -n 's/^version = \([0-9][0-9]*\)$/\1/p' "${LOCK}" | head -1)"
+
 cargo update --manifest-path "${BUNDLE}" -p bytes --precise 1.11.1
 cargo update --manifest-path "${BUNDLE}" -p shlex --precise 1.3.0
+
+new_ver="$(sed -n 's/^version = \([0-9][0-9]*\)$/\1/p' "${LOCK}" | head -1)"
+if [ -n "${orig_ver}" ] && [ -n "${new_ver}" ] && [ "${new_ver}" != "${orig_ver}" ]; then
+  echo "  ↩ restoring Cargo.lock format version ${new_ver} → ${orig_ver}"
+  sed -i.bak "s/^version = ${new_ver}$/version = ${orig_ver}/" "${LOCK}" && rm -f "${LOCK}.bak"
+fi
 echo "  ✅ bytes→1.11.1, shlex→1.3.0"

@@ -60,9 +60,11 @@ jobs:
       # `google/osv-scanner-action@…` pin failed with "Top level 'runs:' …".
       - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
+          # osv-scanner v2 removed the top-level `--skip-git` flag (it errored
+          # with "flag provided but not defined"). `scan source` no longer walks
+          # git history, so recursive directory scan is all we need.
           scan-args: |-
             --recursive
-            --skip-git
             ./.src
 
   # ── Repo sweep: CVEs, secrets, workflow misconfig ───────────────────────────
