@@ -9,9 +9,8 @@
 # will need iteration on their real runners — they are gated by the same contract
 # test, so a broken build fails loudly rather than shipping.
 #
-# ⚠️ SUPPLY CHAIN TODO before production: pin every `uses:` to a full commit SHA
-#    (OSSF Scorecard / security.yml enforces this). Tags are used here for
-#    readability during bring-up.
+# Supply chain: every `uses:` is pinned to a full commit SHA (the `# vN` comment
+# records the human-readable version); OSSF Scorecard enforces this.
 
 name: build
 
@@ -33,16 +32,16 @@ jobs:
   macos:
     runs-on: macos-14
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Fetch + verify pinned upstream
         run: bash build/fetch.sh
       - name: Setup Rust (cr-sqlite pinned nightly + rust-src)
         run: bash build/setup-rust.sh
       - name: Build (CommonCrypto) + contract test
         run: bash build/build-macos.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-arm64
           path: dist/macos-arm64/*.dylib
@@ -51,9 +50,9 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install build deps
         run: |
           sudo apt-get update
@@ -64,7 +63,7 @@ jobs:
         run: bash build/setup-rust.sh
       - name: Build + contract test
         run: bash build/build-linux.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-x64
           path: dist/linux-x64/*.so
@@ -75,10 +74,10 @@ jobs:
   windows-sqlcipher:
     runs-on: windows-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1          # x64 MSVC developer environment
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (x64 MSVC dev env)
       - name: Install OpenSSL (vcpkg)
         run: vcpkg install openssl:x64-windows
       - name: Fetch + verify pinned upstream
@@ -89,7 +88,7 @@ jobs:
         env:
           OPENSSL_ROOT: C:/vcpkg/installed/x64-windows
         run: pwsh build/build-windows.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: win-sqlcipher
           path: dist/windows-x64/*
@@ -97,9 +96,9 @@ jobs:
   windows-crsqlite:
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install mingw-w64
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
       - name: Fetch + verify pinned upstream
@@ -108,7 +107,7 @@ jobs:
         run: bash build/setup-rust.sh x86_64-pc-windows-gnu
       - name: Build cr-sqlite (mingw cross)
         run: bash build/build-windows-crsqlite.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: win-crsqlite
           path: dist/windows-x64/*.dll   # crsqlite.dll + bundled mingw runtime
@@ -117,13 +116,13 @@ jobs:
     needs: [windows-sqlcipher, windows-crsqlite]
     runs-on: windows-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: win-sqlcipher, path: dist/windows-x64 }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: win-crsqlite, path: dist/windows-x64 }
       - name: Contract test
         shell: pwsh
@@ -140,7 +139,7 @@ jobs:
           Remove-Item $db -ErrorAction SilentlyContinue
           & "$out\contract.exe" "$out\crsqlite.dll" $db
           if ($LASTEXITCODE -ne 0) { throw "contract failed ($LASTEXITCODE)" }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x64
           path: dist/windows-x64/*.dll
@@ -149,16 +148,16 @@ jobs:
   ios:
     runs-on: macos-14
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Fetch + verify pinned upstream
         run: bash build/fetch.sh
       - name: Setup Rust (+ apple-ios targets)
         run: bash build/setup-rust.sh aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
       - name: Build xcframeworks
         run: bash build/build-ios.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ios
           path: dist/ios
@@ -167,10 +166,10 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
-      - uses: nttld/setup-ndk@v1
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
         id: ndk
         with: { ndk-version: r26d }
       - name: Build OpenSSL per ABI (static, from pinned source)
@@ -191,7 +190,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           OPENSSL_ANDROID: ${{ runner.temp }}/openssl-android
         run: bash build/build-android.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android
           path: dist/android
@@ -204,12 +203,12 @@ jobs:
     needs: android
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: android, path: dist/android }
-      - uses: nttld/setup-ndk@v1
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
         id: ndk
         with: { ndk-version: r26d }
       - name: Enable KVM (emulator acceleration)
@@ -219,7 +218,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Contract on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         with:
@@ -239,9 +238,9 @@ jobs:
       id-token: write        # SLSA provenance signing
       attestations: write
     steps:
-      - uses: step-security/harden-runner@v2
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { path: artifacts }
       - name: Flatten + checksum
         run: |
@@ -254,15 +253,15 @@ jobs:
           done
           cd release && shasum -a 256 * > SHA256SUMS && cat SHA256SUMS
       - name: Generate SBOM (syft)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: release
           output-file: release/sbom.spdx.json
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
           subject-path: release/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-bundle
           path: release
