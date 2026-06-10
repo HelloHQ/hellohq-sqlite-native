@@ -196,6 +196,39 @@ jobs:
           name: android
           path: dist/android
 
+  # ── Android mobile contract: run contract.c on an x86_64 emulator ───────────
+  # Verifies the BUILT .so artifact is capability-correct on the real OS (cipher,
+  # crsql load, CRR round-trip), not just that it linked. Parallel signal — not a
+  # provenance gate yet (emulator flakiness); tighten once it's reliably green.
+  android-contract:
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: android, path: dist/android }
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with: { ndk-version: r26d }
+      - name: Enable KVM (emulator acceleration)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Contract on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        with:
+          api-level: 24
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
+          script: bash build/run-contract-android.sh
+
   # ── Provenance: checksums + SBOM + SLSA attestation over all artifacts ──────
   provenance:
     needs: [macos, linux, windows, ios, android]

@@ -80,6 +80,10 @@ build_abi() {
 
 for abi in arm64-v8a armeabi-v7a x86_64; do build_abi "${abi}"; done
 
+# Ship the generated amalgamation header (ABI-independent) so the off-device
+# contract compile in the android-contract job can #include "sqlite3.h".
+cp "${SRC}/sqlcipher/sqlite3.h" "${OUT}/sqlite3.h"
+
 echo "✅ Android artifacts under ${OUT}:"
 find "${OUT}" -name '*.so' | sed 's/^/    /'
 echo "ℹ️  capability contract runs on an emulator in CI (separate job)."
