@@ -1,0 +1,63 @@
+# deny.toml — cargo-deny policy for cr-sqlite's bundled Rust dependency tree.
+#
+# Scanned by .github/workflows/security.yml (`check advisories bans licenses
+# sources` against .src/cr-sqlite/core/rs/bundle). cargo-deny is deny-by-default
+# for licenses, so without this config it rejects even MIT/Apache-2.0. We allow
+# the permissive licenses actually present in the tree and clarify cr-sqlite's
+# own crates (which declare a non-SPDX "Apache 2" string or ship a LICENSE file
+# with no `license` field) to Apache-2.0 — cr-sqlite is Apache-2.0 licensed.
+
+[advisories]
+version = 2
+# RUSTSEC advisories. Known ones (bytes, shlex) are bumped to patched versions
+# in build/patch-cr-sqlite-deps.sh before this runs; this stays a hard gate.
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+  "Unlicense",
+]
+
+# cr-sqlite first-party crates: non-SPDX "Apache 2" or no `license` field.
+[[licenses.clarify]]
+crate = "crsql_bundle"
+expression = "Apache-2.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "crsql_core"
+expression = "Apache-2.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "crsql_fractindex_core"
+expression = "Apache-2.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "sqlite3_capi"
+expression = "Apache-2.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "sqlite_nostd"
+expression = "Apache-2.0"
+license-files = []
+
+[bans]
+# Defaults: warn on multiple versions, no banned crates. Supply-chain hygiene
+# is enforced by [sources] + the upstream commit pins in upstream.lock.
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# cr-sqlite pulls one crate from a git dependency (sqlite-rs-embedded submodule,
+# referenced by path) — path deps are first-party and need no allow-list entry.

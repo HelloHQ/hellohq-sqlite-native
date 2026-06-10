@@ -46,6 +46,11 @@ jobs:
           manifest-path: .src/cr-sqlite/core/rs/bundle/Cargo.toml
           # advisories = RUSTSEC; bans/licenses/sources = supply-chain allowlist.
           command: check advisories bans licenses sources
+          # cargo-deny is deny-by-default for licenses; our policy (allow-list +
+          # cr-sqlite first-party license clarifications) lives in the repo-root
+          # deny.toml, not next to the fetched manifest. The action runs with the
+          # workspace as CWD, so reference it relatively.
+          command-arguments: --config deny.toml
 
   # ── Known-CVE deps across all manifests ─────────────────────────────────────
   osv-scanner:
