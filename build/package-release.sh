@@ -26,8 +26,8 @@ stage() { # <artifact-subdir>  -> echoes the staging dir
   echo "${d}"
 }
 
-if [ -d "${ART}/macos-universal" ]; then
-  tar -czf "${OUT}/${NAME}-macos-universal.tar.gz" -C "$(stage macos-universal)" .
+if [ -d "${ART}/macos-arm64" ]; then
+  tar -czf "${OUT}/${NAME}-macos-arm64.tar.gz" -C "$(stage macos-arm64)" .
 fi
 if [ -d "${ART}/linux-x64" ]; then
   tar -czf "${OUT}/${NAME}-linux-x64.tar.gz" -C "$(stage linux-x64)" .

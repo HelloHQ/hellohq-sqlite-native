@@ -26,15 +26,12 @@ permissions:
   contents: read
 
 jobs:
-  # ── macOS: one native job per arch (no cross-compile; cr-sqlite -Zbuild-std) ─
+  # ── macOS arm64 (Apple Silicon only — Intel/x86_64 dropped, no universal) ────
+  # cr-sqlite's -Zbuild-std can't cross-compile, so x86_64 would need the Intel
+  # macos-13 runner (the last one, deprecation-bound). HelloHQ targets Apple
+  # Silicon, so we ship a single arm64 slice.
   macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: arm64,  runner: macos-14 }   # Apple Silicon
-          - { arch: x86_64, runner: macos-13 }   # Intel
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14
     steps:
       - uses: step-security/harden-runner@v2
         with: { egress-policy: audit }
@@ -47,35 +44,8 @@ jobs:
         run: bash build/build-macos.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
-          path: dist/macos-${{ matrix.arch }}/*.dylib
-
-  macos-universal:
-    needs: macos
-    runs-on: macos-14
-    steps:
-      - uses: step-security/harden-runner@v2
-        with: { egress-policy: audit }
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with: { name: macos-arm64,  path: dist/macos-arm64 }
-      - uses: actions/download-artifact@v4
-        with: { name: macos-x86_64, path: dist/macos-x86_64 }
-      - name: Fuse universal binaries
-        run: bash build/lipo-macos.sh
-      - name: Fetch sources + contract test (universal artifact)
-        run: |
-          bash build/fetch.sh
-          CC="$(xcrun -f clang)"
-          "$CC" -O2 -I.src/sqlcipher test/contract.c \
-            -Ldist/macos -lsqlcipher -Wl,-rpath,@loader_path -Wl,-rpath,"$PWD/dist/macos" \
-            -o dist/macos/contract
-          rm -f /tmp/hq-uni.db
-          dist/macos/contract dist/macos/crsqlite.dylib /tmp/hq-uni.db
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-universal
-          path: dist/macos/*.dylib
+          name: macos-arm64
+          path: dist/macos-arm64/*.dylib
 
   # ── Linux x86_64 ────────────────────────────────────────────────────────────
   linux:
@@ -162,6 +132,10 @@ jobs:
         run: bash build/fetch.sh
       - name: Setup Rust (+ android targets)
         run: bash build/setup-rust.sh aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: Install cargo-ndk
+        # cr-sqlite's Makefile Android path invokes `cargo ndk` (sets the NDK
+        # linker per target). Built with stable (repo root has no toolchain pin).
+        run: cargo install cargo-ndk --locked
       - name: Build per-ABI
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
@@ -174,7 +148,7 @@ jobs:
 
   # ── Provenance: checksums + SBOM + SLSA attestation over all artifacts ──────
   provenance:
-    needs: [macos-universal, linux, windows, ios, android]
+    needs: [macos, linux, windows, ios, android]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:

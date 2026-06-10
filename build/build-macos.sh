@@ -3,11 +3,10 @@
 #   dist/macos-<arch>/libsqlcipher.dylib   (SQLCipher = the sqlite3 library)
 #   dist/macos-<arch>/crsqlite.dylib       (cr-sqlite loadable extension)
 #
-# A universal binary is produced by building each arch NATIVELY on its own runner
-# (arm64 on macos-14, x86_64 on macos-13) and fusing with build/lipo-macos.sh.
-# This is native-only by design: cr-sqlite uses `-Zbuild-std` and does NOT
-# cross-compile cleanly, so each arch is built on a matching runner — no local
-# cross-build. (SQLCipher's C cross-builds fine, but cr-sqlite is the constraint.)
+# Apple Silicon only — HelloHQ does not target Intel Macs, so there is no x86_64
+# slice and no universal binary. (cr-sqlite's `-Zbuild-std` can't cross-compile,
+# so an x86_64 slice would require the deprecation-bound Intel macos-13 runner;
+# dropping Intel support removes that dependency entirely.)
 #
 # Crypto provider: **CommonCrypto** (Apple system framework; -DSQLCIPHER_CRYPTO_CC
 # + -framework Security). No OpenSSL → the artifact has NO third-party dynamic
