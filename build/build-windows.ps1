@@ -43,16 +43,18 @@ try {
     '-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown',
     "-I`"$OsslInc`""
   ) -join ' '
-  # Makefile.msc builds the DLL; link OpenSSL's libcrypto. SQLITE3DLL renames the
-  # output. NLTLIBS/LTLIBPATHS carry the extra link inputs.
+  # Build the `dll` phony target (Makefile.msc:1819 → $(SQLITE3DLL)); SQLITE3DLL
+  # renames the output. Name it sqlcipher.dll to match the resolver + sqlite3
+  # build-hook (`name: sqlcipher` → sqlcipher.dll on Windows). LTLIBPATHS/LTLIBS
+  # carry OpenSSL's libcrypto to the linker.
   nmake /f Makefile.msc clean
-  nmake /f Makefile.msc sqlite3.dll `
+  nmake /f Makefile.msc dll `
     "OPTS=$opts" `
-    "SQLITE3DLL=libsqlcipher.dll" `
+    "SQLITE3DLL=sqlcipher.dll" `
     "LTLIBPATHS=/LIBPATH:`"$OsslLib`"" `
     "LTLIBS=libcrypto.lib"
-  Copy-Item 'libsqlcipher.dll' (Join-Path $Out 'libsqlcipher.dll') -Force
-  if (Test-Path 'libsqlcipher.lib') { Copy-Item 'libsqlcipher.lib' (Join-Path $Out 'libsqlcipher.lib') -Force }
+  Copy-Item 'sqlcipher.dll' (Join-Path $Out 'sqlcipher.dll') -Force
+  if (Test-Path 'sqlcipher.lib') { Copy-Item 'sqlcipher.lib' (Join-Path $Out 'sqlcipher.lib') -Force }
 } finally { Pop-Location }
 
 # Bundle the OpenSSL runtime DLL next to ours (consumers load it from the dir).
@@ -75,7 +77,7 @@ try {
 Write-Host '▸ contract test (test/contract.c)'
 $contract = Join-Path $Out 'contract.exe'
 cl /O2 /I (Join-Path $Src 'sqlcipher') (Join-Path $Root 'test/contract.c') `
-   /Fe:$contract /link /LIBPATH:$Out libsqlcipher.lib
+   /Fe:$contract /link /LIBPATH:$Out sqlcipher.lib
 $dbPath = Join-Path $env:TEMP 'hq-native-contract.db'
 Remove-Item $dbPath -ErrorAction SilentlyContinue
 & $contract (Join-Path $Out 'crsqlite.dll') $dbPath

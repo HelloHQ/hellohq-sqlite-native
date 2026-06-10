@@ -153,12 +153,11 @@ jobs:
       - uses: nttld/setup-ndk@v1
         id: ndk
         with: { ndk-version: r26d }
-      - name: Provision OpenSSL per ABI
-        # TODO(M2): build/fetch prebuilt OpenSSL static libs per ABI into
-        # $OPENSSL_ANDROID/<abi>/{include,lib}. Placeholder until that lands.
-        run: |
-          echo "::warning::OpenSSL-per-ABI provisioning not yet implemented"
-          mkdir -p "${RUNNER_TEMP}/openssl-android"
+      - name: Build OpenSSL per ABI (static, from pinned source)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          OPENSSL_ANDROID: ${{ runner.temp }}/openssl-android
+        run: bash build/openssl-android.sh
       - name: Fetch + verify pinned upstream
         run: bash build/fetch.sh
       - name: Setup Rust (+ android targets)

@@ -21,6 +21,13 @@ crsqlite:
   ref:    HEAD
   commit: 3133cacac0177ff11a2022a5ebd08f17749559f5
 
+# OpenSSL — SQLCipher's crypto provider on Android (built static, per ABI) and
+# linked on Linux/Windows. Apple uses CommonCrypto and pulls NO OpenSSL.
+openssl:
+  source: https://github.com/openssl/openssl
+  tag:    openssl-3.5.7
+  commit: 8cf17aaeb4599f8af87fefd810b5b5fee90fe69e
+
 # Crypto provider for SQLCipher (per platform):
 #   Apple (iOS/macOS) → CommonCrypto (system; no bundled lib, no extra license)
 #   Android/Linux/Windows → OpenSSL 3.x (Apache-2.0; bundle its license)

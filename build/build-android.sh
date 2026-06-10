@@ -56,7 +56,8 @@ build_abi() {
     # functions, so skip the probe rather than wrongly linking the host libm.
     ./configure --with-tempstore=yes --disable-math \
       CC="${cc}" \
-      CFLAGS="-O2 -fPIC -DSQLITE_HAS_CODEC -DSQLITE_TEMP_STORE=2 \
+      CFLAGS="-O2 -fPIC -DSQLITE_HAS_CODEC -DSQLITE_THREADSAFE=1 \
+              -DSQLITE_TEMP_STORE=2 \
               -DSQLITE_EXTRA_INIT=sqlcipher_extra_init \
               -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown \
               -I${osl}/include" \
