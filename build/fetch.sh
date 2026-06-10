@@ -66,4 +66,10 @@ clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha>
 mkdir -p "${SRC}"
 clone_verify sqlcipher "$(val sqlcipher source)" "$(val sqlcipher tag)"  "$(val sqlcipher commit)"
 clone_verify cr-sqlite "$(val crsqlite source)"  ""                      "$(val crsqlite commit)"
+
+# Clear known RUSTSEC advisories in cr-sqlite's pinned Rust deps (lockfile bump)
+# so the security scan AND the shipped artifact are clean. Self-skips with no
+# cargo (the SQLCipher-only build, which never compiles cr-sqlite).
+bash "${SCRIPT_DIR}/patch-cr-sqlite-deps.sh"
+
 echo "✅ upstream sources fetched + verified into ${SRC}"

@@ -55,7 +55,10 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: bash build/fetch.sh
-      - uses: google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+      # The runnable action lives in the osv-scanner-action SUBDIR; the repo-root
+      # action.yml has no `runs:` section, which is why the bare
+      # `google/osv-scanner-action@…` pin failed with "Top level 'runs:' …".
+      - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
           scan-args: |-
             --recursive
