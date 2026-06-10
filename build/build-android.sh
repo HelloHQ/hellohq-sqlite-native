@@ -62,7 +62,7 @@ build_abi() {
               -DSQLITE_EXTRA_INIT=sqlcipher_extra_init \
               -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown \
               -I${osl}/include" \
-      LDFLAGS="-L${osl}/lib -l:libcrypto.a" >/dev/null
+      LDFLAGS="-L${osl}/lib -l:libcrypto.a -llog" >/dev/null   # -llog: SQLite/Android uses __android_log_*
     make -j"$(nproc)" libsqlite3.so >/dev/null )
   cp "$(readlink -f "${SRC}/sqlcipher/libsqlite3.so")" "${out}/libsqlcipher.so"
   patchelf --set-soname libsqlcipher.so "${out}/libsqlcipher.so" 2>/dev/null || true
