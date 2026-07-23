@@ -1,0 +1,32 @@
+name: "hellohq-sqlite-native"
+
+# WHY THIS EXISTS
+#
+# `.src/` is FETCHED upstream source (SQLCipher + cr-sqlite), pinned by commit in
+# upstream.lock and never committed to this repo (see .gitignore). CodeQL's
+# autobuild traces `build/build-linux.sh`, which compiles that fetched tree — so
+# without this filter, every defect in the SQLite amalgamation, SQLCipher's
+# autosetup Tcl shell, and cr-sqlite's Rust gets reported as if it were ours.
+#
+# Those are not actionable here. The tree is re-fetched from an immutable pinned
+# commit on every build, so an edit would be discarded; and forking a crypto/DB
+# amalgamation to silence a static-analysis finding trades a theoretical bug for
+# a real maintenance and correctness risk. Upstream fixes belong upstream, and
+# arrive here as an upstream.lock bump.
+#
+# UPSTREAM IS STILL SCANNED — by the tools built for third-party code, all
+# already wired into .github/workflows/security.yml:
+#
+#   osv-scanner   `--recursive ./.src`  — CVE matching across the fetched tree
+#   trivy         fs scan               — vuln + secret + misconfig, HIGH/CRITICAL
+#   cargo-audit                         — RustSec advisories
+#   cargo-deny                          — advisories + license policy
+#
+# So this narrows CodeQL to the code this repo owns and can change (build
+# scripts and test/contract.c); it does not reduce coverage of upstream CVEs.
+#
+# If a genuine upstream defect ever needs carrying locally, the repo already
+# supports *.patch files alongside upstream.lock — that is the supported route,
+# not editing the fetched tree in place.
+paths-ignore:
+  - '.src/**'
