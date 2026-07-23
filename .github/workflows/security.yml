@@ -59,7 +59,11 @@ jobs:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - run: bash build/fetch.sh
+      - env:
+          # sqlite3mc ships in the Windows release, so it belongs in the CVE
+          # sweep even though only the Windows job compiles it.
+          SQLITE3MC: '1'
+        run: bash build/fetch.sh
       # The runnable action lives in the osv-scanner-action SUBDIR; the repo-root
       # action.yml has no `runs:` section, which is why the bare
       # `google/osv-scanner-action@…` pin failed with "Top level 'runs:' …".

@@ -67,6 +67,14 @@ mkdir -p "${SRC}"
 clone_verify sqlcipher "$(val sqlcipher source)" "$(val sqlcipher tag)"  "$(val sqlcipher commit)"
 clone_verify cr-sqlite "$(val crsqlite source)"  ""                      "$(val crsqlite commit)"
 
+# SQLite3 Multiple Ciphers — opt-in, because only the Windows sqlite3mc job
+# needs it and it is a large clone (full SQLite sources). Every other platform
+# job would pay for it and never compile it.
+#   SQLITE3MC=1 bash build/fetch.sh
+if [ "${SQLITE3MC:-0}" = "1" ]; then
+  clone_verify sqlite3mc "$(val sqlite3mc source)" "$(val sqlite3mc tag)" "$(val sqlite3mc commit)"
+fi
+
 # Clear known RUSTSEC advisories in cr-sqlite's pinned Rust deps (lockfile bump)
 # so the security scan AND the shipped artifact are clean. Self-skips with no
 # cargo (the SQLCipher-only build, which never compiles cr-sqlite).

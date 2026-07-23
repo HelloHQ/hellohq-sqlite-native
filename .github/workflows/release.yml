@@ -62,6 +62,10 @@ jobs:
         with: { path: artifacts }
 
       - name: Assemble THIRD_PARTY_LICENSES
+        env:
+          # sqlite3mc ships in the Windows archive, so its license must be in the
+          # bundle — fetch its source here even though this job compiles nothing.
+          SQLITE3MC: '1'
         run: |
           bash build/fetch.sh
           bash build/third-party-licenses.sh
