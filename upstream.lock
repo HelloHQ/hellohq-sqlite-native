@@ -21,6 +21,28 @@ crsqlite:
   ref:    HEAD
   commit: 3133cacac0177ff11a2022a5ebd08f17749559f5
 
+# SQLite3 Multiple Ciphers — a SEPARATE library from SQLCipher above, not a
+# variant of it. It implements a SQLCipher-*compatible* cipher (`PRAGMA cipher =
+# 'sqlcipher'`) alongside its own, with its own built-in crypto (no OpenSSL).
+#
+# Why we build it: the Flutter app's `package:sqlite3` build hook is configured
+# `source: sqlite3mc`, and hellohq_db's unlockSqlcipher() issues the
+# sqlite3mc-only `PRAGMA cipher = 'sqlcipher'` + `PRAGMA legacy = 4` before
+# `PRAGMA key`. Real SQLCipher does NOT understand those pragmas, so the two are
+# not interchangeable at the consumer — see HelloHQ/hellohq#1074.
+#
+# IMPORTANT - VERSION LOCKSTEP: this must stay equal to the sqlite3mc amalgamation
+# vendored in the HelloHQ sqlite3.dart fork (third_party/sqlite3mc/, currently
+# "SQLite3 Multiple Ciphers 2.3.4" on SQLite 3.53.1), which is what Linux
+# compiles from. Windows loading a different sqlite3mc version would key and
+# format databases with different parameters than Linux/macOS. Bump both or
+# neither.
+sqlite3mc:
+  source: https://github.com/utelle/SQLite3MultipleCiphers
+  tag:    v2.3.4
+  # Annotated tag → this is the COMMIT it dereferences to (fetch.sh pins by SHA).
+  commit: 04a7a56392d77fc46007f0023d3eb4b5b701474b
+
 # OpenSSL — SQLCipher's crypto provider on Android (built static, per ABI) and
 # linked on Linux/Windows. Apple uses CommonCrypto and pulls NO OpenSSL.
 openssl:

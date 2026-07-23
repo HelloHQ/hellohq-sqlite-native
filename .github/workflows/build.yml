@@ -112,8 +112,36 @@ jobs:
           name: win-crsqlite
           path: dist/windows-x64/*.dll   # crsqlite.dll + bundled mingw runtime
 
+  # SQLite3 Multiple Ciphers — a second, independent sqlite3 library shipped
+  # alongside libsqlcipher.dll (NOT a variant of it). The Flutter app's
+  # package:sqlite3 hook is configured `source: sqlite3mc` and hellohq_db keys
+  # connections with the sqlite3mc-only `PRAGMA cipher = 'sqlcipher'`, which real
+  # SQLCipher rejects. Publishing it here lets the app provision it through the
+  # same SHA-256 + SLSA trust gate as the other native libs instead of
+  # downloading it from a third-party GH release at test start
+  # (HelloHQ/hellohq#1074). Self-contained: no OpenSSL, no Rust.
+  windows-sqlite3mc:
+    runs-on: windows-latest
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (x64 MSVC dev env)
+      - name: Fetch + verify pinned upstream
+        shell: bash
+        env:
+          SQLITE3MC: '1'
+        run: bash build/fetch.sh
+      - name: Build sqlite3mc (MSVC + CMake)
+        shell: pwsh
+        run: pwsh build/build-windows-sqlite3mc.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: win-sqlite3mc
+          path: dist/windows-x64/sqlite3mc*
+
   windows:
-    needs: [windows-sqlcipher, windows-crsqlite]
+    needs: [windows-sqlcipher, windows-crsqlite, windows-sqlite3mc]
     runs-on: windows-latest
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
@@ -124,6 +152,8 @@ jobs:
         with: { name: win-sqlcipher, path: dist/windows-x64 }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: win-crsqlite, path: dist/windows-x64 }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { name: win-sqlite3mc, path: dist/windows-x64 }
       - name: Contract test
         shell: pwsh
         run: |
@@ -139,10 +169,31 @@ jobs:
           Remove-Item $db -ErrorAction SilentlyContinue
           & "$out\contract.exe" "$out\crsqlite.dll" $db
           if ($LASTEXITCODE -ne 0) { throw "contract failed ($LASTEXITCODE)" }
+
+      - name: Contract test (sqlite3mc)
+        shell: pwsh
+        run: |
+          # Same checklist, second library. sqlite3mc's headers live in their own
+          # subdir so its sqlite3.h doesn't shadow SQLCipher's — put that dir
+          # FIRST on the include path, and link its own import lib. A distinct
+          # exe + db file keeps the two runs from sharing state.
+          $out = Join-Path $PWD 'dist\windows-x64'
+          $inc = Join-Path $out 'sqlite3mc-include'
+          cl /O2 /I "$inc" test\contract.c /Fe:"$out\contract-mc.exe" `
+             /link /LIBPATH:"$out" sqlite3mc.lib
+          if ($LASTEXITCODE -ne 0) { throw "cl failed ($LASTEXITCODE)" }
+          $env:PATH = "$out;$env:PATH"
+          $db = Join-Path $env:TEMP 'hq-win-contract-mc.db'
+          Remove-Item $db -ErrorAction SilentlyContinue
+          & "$out\contract-mc.exe" --sqlite3mc "$out\crsqlite.dll" $db
+          if ($LASTEXITCODE -ne 0) { throw "sqlite3mc contract failed ($LASTEXITCODE)" }
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x64
-          path: dist/windows-x64/*.dll
+          path: |
+            dist/windows-x64/*.dll
+            dist/windows-x64/sqlite3mc-include/*.h
 
   # ── iOS (device arm64 + simulator) → xcframework ────────────────────────────
   ios:

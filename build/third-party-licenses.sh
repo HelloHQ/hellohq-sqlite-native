@@ -41,6 +41,12 @@ emit_license() { # <title> <glob...>
   emit_license "cr-sqlite (MIT / Apache-2.0)" \
     "${SRC}/cr-sqlite/LICENSE" "${SRC}/cr-sqlite/LICENSE.md" "${SRC}/cr-sqlite/LICENSE-*"
 
+  # Shipped on Windows only (sqlite3mc.dll). Requires SQLITE3MC=1 on the
+  # fetch.sh that precedes this script, or the source tree is absent and this
+  # section degrades to the "not found" note.
+  emit_license "SQLite3 Multiple Ciphers (MIT)" \
+    "${SRC}/sqlite3mc/LICENSE" "${SRC}/sqlite3mc/LICENSE.md" "${SRC}/sqlite3mc/LICENSE.txt"
+
   echo "================ OpenSSL 3.x (Apache-2.0) ================"
   echo "Linked on Linux / Windows / Android only (statically where possible)."
   echo "Apple platforms use system CommonCrypto and bundle NO OpenSSL."
