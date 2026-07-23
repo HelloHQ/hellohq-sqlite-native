@@ -30,6 +30,14 @@ crate = "crsql_bundle"
 expression = "Apache-2.0"
 license-files = []
 
+# The crate that actually ships (cr-sqlite's core/Makefile defaults to
+# bundle=bundle_static). Same situation as crsql_bundle above — no `license`
+# field — and it went unnoticed while the scanners only pointed at `bundle`.
+[[licenses.clarify]]
+crate = "crsql_bundle_static"
+expression = "Apache-2.0"
+license-files = []
+
 [[licenses.clarify]]
 crate = "crsql_core"
 expression = "Apache-2.0"

@@ -11,6 +11,14 @@
 #                                                       memory corruption
 #   RUSTSEC-2024-0006 / CVE-2024-58266  shlex  <1.3.0   quote/join under-escape →
 #                                                       potential cmd injection
+#   GHSA-c827-hfw6-qwvm (6.5)           rustix <0.38.19 Errno::from_io_error
+#                                                       mis-derives an errno from
+#                                                       a synthetic io::Error
+#
+# rustix was found ONLY in bundle_static — i.e. only in the crate that ships —
+# and only after osv-scanner stopped skipping .src/ via .gitignore. It is the
+# concrete example of why that blind spot mattered: cargo-audit/cargo-deny were
+# pointed at `bundle`, which does not carry it.
 #
 # Lockfile-only edits (no compile), so we force the default toolchain — the
 # bundle pins an old nightly that the scan jobs don't install, and a `.lock`
@@ -49,7 +57,7 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "▸ patch-cr-sqlite-deps: clearing RUSTSEC-2026-0007 (bytes), RUSTSEC-2024-0006 (shlex)"
+echo "▸ patch-cr-sqlite-deps: clearing RUSTSEC-2026-0007 (bytes), RUSTSEC-2024-0006 (shlex), GHSA-c827-hfw6-qwvm (rustix)"
 
 # The bundle pins nightly-2023-10-05 via rust-toolchain.toml; override to the
 # runner's default toolchain so a lockfile-only update never has to install it.
@@ -78,15 +86,28 @@ for crate in ${CRATES}; do
   # (verified with a `--locked` parse on the old toolchain).
   orig_ver="$(sed -n 's/^version = \([0-9][0-9]*\)$/\1/p' "${lock}" | head -1)"
 
-  cargo update --manifest-path "${manifest}" -p bytes --precise 1.11.1
-  cargo update --manifest-path "${manifest}" -p shlex --precise 1.3.0
+  # Bump only what this lock actually contains. The crates differ: rustix is in
+  # bundle_static and NOT in bundle, and `cargo update -p <absent>` errors out —
+  # under `set -e` that would abort the whole patch and silently leave the
+  # shipped lock unpatched. Grep the lock first, and report anything skipped so
+  # a package quietly disappearing upstream is visible rather than assumed.
+  bumped=""
+  for pin in bytes:1.11.1 shlex:1.3.0 rustix:0.38.19; do
+    pkg="${pin%%:*}"; want="${pin##*:}"
+    if grep -q "^name = \"${pkg}\"$" "${lock}"; then
+      cargo update --manifest-path "${manifest}" -p "${pkg}" --precise "${want}"
+      bumped="${bumped} ${pkg}→${want}"
+    else
+      echo "  – ${crate}: ${pkg} not in this lock, nothing to bump"
+    fi
+  done
 
   new_ver="$(sed -n 's/^version = \([0-9][0-9]*\)$/\1/p' "${lock}" | head -1)"
   if [ -n "${orig_ver}" ] && [ -n "${new_ver}" ] && [ "${new_ver}" != "${orig_ver}" ]; then
     echo "  ↩ ${crate}: restoring Cargo.lock format version ${new_ver} → ${orig_ver}"
     sed -i.bak "s/^version = ${new_ver}$/version = ${orig_ver}/" "${lock}" && rm -f "${lock}.bak"
   fi
-  echo "  ✅ ${crate}: bytes→1.11.1, shlex→1.3.0"
+  echo "  ✅ ${crate}:${bumped:- nothing to bump}"
   patched=$((patched + 1))
 done
 
