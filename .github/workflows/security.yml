@@ -21,8 +21,18 @@ permissions:
 
 jobs:
   # ── Rust dependency hygiene for cr-sqlite (RUSTSEC + license/source allowlist) ─
+  #
+  # `bundle_static` FIRST because it is the crate that ships: cr-sqlite's
+  # core/Makefile defaults to `bundle=bundle_static`, and every platform build
+  # here runs `make loadable`, which compiles `rs/$(bundle)`. These jobs used to
+  # scan only `rs/bundle` — a crate the Makefile never selects — so they reported
+  # clean while the shipped extension carried bytes 1.5.0 and shlex 1.2.0.
   cargo-audit:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [bundle_static, bundle]
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
@@ -39,10 +49,15 @@ jobs:
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: .src/cr-sqlite/core/rs/bundle
+          working-directory: .src/cr-sqlite/core/rs/${{ matrix.crate }}
 
   cargo-deny:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Same reasoning as cargo-audit: bundle_static is the crate that ships.
+        crate: [bundle_static, bundle]
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
@@ -50,7 +65,7 @@ jobs:
       - run: bash build/fetch.sh
       - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2
         with:
-          manifest-path: .src/cr-sqlite/core/rs/bundle/Cargo.toml
+          manifest-path: .src/cr-sqlite/core/rs/${{ matrix.crate }}/Cargo.toml
           # advisories = RUSTSEC; bans/licenses/sources = supply-chain allowlist.
           command: check advisories bans licenses sources
           # cargo-deny is deny-by-default for licenses; our policy (allow-list +
@@ -126,7 +141,7 @@ jobs:
         # files to analyze.
         #
         # Upstream's Rust is not unscanned — cargo-audit and cargo-deny both run
-        # against .src/cr-sqlite/core/rs/bundle above (RUSTSEC advisories, bans,
+        # against .src/cr-sqlite/core/rs/{bundle_static,bundle} above (RUSTSEC, bans,
         # licenses, sources), and osv-scanner sweeps .src/ recursively. Add
         # `rust` back the moment this repo gains Rust of its own.
         language: [c-cpp]
