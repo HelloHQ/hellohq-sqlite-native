@@ -5,6 +5,7 @@
 /cr-sqlite/
 
 # Build outputs / distributable binaries (published via Releases, not committed)
+/.build/
 /dist/
 /out/
 *.dylib

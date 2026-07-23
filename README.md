@@ -21,6 +21,24 @@ Per platform, **two libraries**:
 - `crsqlite.<dylib|so|dll>` — the cr-sqlite loadable extension (`crsql_*`
   functions, CRDT changesets).
 
+Plus, **on Windows only**, a third library:
+
+- `sqlite3mc.dll` — a [SQLite3 Multiple Ciphers][mc] build of SQLite. This is a
+  *different project* from SQLCipher, not a variant of it. It implements a
+  SQLCipher-**compatible** cipher that is selected with `PRAGMA cipher =
+  'sqlcipher'` + `PRAGMA legacy = 4` **before** `PRAGMA key`. Real SQLCipher
+  does not understand those pragmas, and sqlite3mc leaves `PRAGMA
+  cipher_version` empty — so the two are **not** drop-in replacements for each
+  other. It carries its own crypto, so unlike `libsqlcipher.dll` it needs no
+  `libcrypto-*.dll` beside it.
+
+  It exists because the Flutter app's `package:sqlite3` build hook is configured
+  `source: sqlite3mc`. Shipping it here lets the app provision it through the
+  same SHA-256 + SLSA trust gate as everything else, instead of downloading it
+  from a third-party GitHub release while tests are starting.
+
+[mc]: https://github.com/utelle/SQLite3MultipleCiphers
+
 Artifacts are published via GitHub Releases with **SLSA build provenance**
 (`actions/attest-build-provenance`) and SHA-256 checksums.
 
@@ -44,6 +62,12 @@ SHA-256 and build attestation before use.
 |---|---|---|
 | SQLCipher | github.com/sqlcipher/sqlcipher | `v4.16.0` (commit-verified) |
 | cr-sqlite | github.com/superfly/cr-sqlite | commit-pinned (fork has no release tags) |
+| SQLite3 Multiple Ciphers | github.com/utelle/SQLite3MultipleCiphers | `v2.3.4` (commit-verified, Windows only) |
+
+The sqlite3mc pin must stay in **lockstep** with the amalgamation vendored in the
+HelloHQ `sqlite3.dart` fork, which is what the app's Linux builds compile from.
+A version skew there would key and format databases differently per platform.
+`fetch.sh` only clones it when `SQLITE3MC=1` — no other platform needs it.
 
 Bumping = edit `upstream.lock`; the build + security scan + contract gate runs on
 the PR. Crypto/DB bumps require human approval — never auto-merged.
@@ -84,6 +108,18 @@ libraries: cipher active, key round-trip, **wrong key rejected**, rekey,
 cr-sqlite loads, CRR changeset round-trip, version parity. "Coverage" here is
 **capability × platform completeness** (the matrix must be all-green), not a
 source line-coverage percentage. See `ROADMAP.md`.
+
+On Windows the same checklist runs a second time against `sqlite3mc.dll`:
+
+```sh
+contract --sqlite3mc <crsqlite.dll> <db-path>
+```
+
+`--sqlite3mc` switches the unlock handshake to `PRAGMA cipher = 'sqlcipher'` +
+`PRAGMA legacy = 4` before `PRAGMA key`, and asserts `PRAGMA cipher` really
+reports `sqlcipher` — a sqlite3mc that quietly fell back to its own default
+cipher would still encrypt, but would write databases the rest of the fleet
+cannot open. One checklist for both libraries is what keeps them from drifting.
 
 ## Security
 
