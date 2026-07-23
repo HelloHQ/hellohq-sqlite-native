@@ -74,41 +74,63 @@ jobs:
           # workspace as CWD, so reference it relatively.
           command-arguments: --config deny.toml
 
-  # ── Known-CVE deps across all manifests ─────────────────────────────────────
+  # ── Known-CVE deps in the dependency graph that actually SHIPS ──────────────
   osv-scanner:
     runs-on: ubuntu-latest
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - env:
-          # sqlite3mc ships in the Windows release, so it belongs in the CVE
-          # sweep even though only the Windows job compiles it.
-          SQLITE3MC: '1'
-        run: bash build/fetch.sh
+      # No SQLITE3MC=1 here (unlike the Windows build). osv-scanner is a
+      # MANIFEST scanner and sqlite3mc vendors C amalgamation sources with no
+      # lockfile, so the recursive sweep extracted ZERO packages from it — its
+      # only effect was an extraction error trying to parse
+      # sqlite3mc/LICENSE.spdx as an SPDX SBOM. Skipping that (large) clone
+      # costs no CVE coverage: sqlite3mc's C is covered by codeql, and its
+      # version is pinned + SHA-verified in upstream.lock.
+      - run: bash build/fetch.sh
       # The runnable action lives in the osv-scanner-action SUBDIR; the repo-root
       # action.yml has no `runs:` section, which is why the bare
       # `google/osv-scanner-action@…` pin failed with "Top level 'runs:' …".
       - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         with:
-          # osv-scanner v2 removed the top-level `--skip-git` flag (it errored
-          # with "flag provided but not defined"). `scan source` no longer walks
-          # git history, so recursive directory scan is all we need.
+          # SCOPE = the lockfiles that GOVERN THE SHIPPED ARTIFACT, i.e. exactly
+          # the crates cargo-audit/cargo-deny target above, for the same reason.
+          # cr-sqlite's core/Makefile defaults to `bundle=bundle_static` and every
+          # platform script runs `make loadable`, so bundle_static is what
+          # compiles. Cargo resolves the WHOLE graph — including the path-deps
+          # core/, fractindex-core/ and sqlite-rs-embedded/* — through the lock
+          # sitting next to the crate being built, so bundle_static/Cargo.lock is
+          # already a COMPLETE picture of what ships. Narrowing to it loses no
+          # coverage of the artifact.
+          #
+          # Why NOT `--recursive ./.src`: that also swept locks which never
+          # govern any build — cr-sqlite's Python test suite
+          # (py/correctness/requirements.txt → pytest), its JS test tooling
+          # (core/pnpm-lock.yaml → minimatch, brace-expansion), its test harness
+          # (integration_check/), its build tools (tools/), and the standalone dev
+          # locks of sub-crates. Those are UPSTREAM'S TEST DEPENDENCIES: absent
+          # from the extension we publish and unfixable from this repo, since
+          # .src/ is re-fetched from a pinned commit every build. Keeping them in
+          # scope meant 19 unactionable findings that would either block every PR
+          # or train reviewers to ignore a red security job. Neither is security.
           #
           # `--no-ignore` IS LOAD-BEARING, not cosmetic. osv-scanner honours
-          # .gitignore by default (`--use-gitignore`), and `/.src/` is gitignored
-          # (it is fetched, never committed) — so the scan walked into .src/,
-          # skipped every file as "ignored", and exited clean having found
-          # nothing. That is exactly what the run warned about:
-          #   "No lockfiles found. Please use the --allow-no-lockfiles flag..."
-          # The tree does contain lockfiles (e.g. cr-sqlite's
-          # core/rs/bundle/Cargo.lock), so the job was passing VACUOUSLY and
-          # provided zero CVE coverage of upstream. Do not remove this flag; if
-          # this warning ever returns, the sweep has gone blind again.
+          # .gitignore by default, and `/.src/` is gitignored (it is fetched,
+          # never committed) — without this flag the scan skips every file as
+          # "ignored" and exits clean having read nothing, which is how this job
+          # passed VACUOUSLY before. Do not remove it.
+          #
+          # `--lockfile` is the STABLE flag; `--experimental-exclude` would let us
+          # keep the recursive walk but its name can change without notice, and
+          # this workflow has already been bitten by v2 dropping `--skip-git`.
+          # Explicit paths also fail LOUDLY (osv-scanner errors on a missing
+          # lockfile) if upstream moves these crates, rather than going quietly
+          # blind again.
           scan-args: |-
-            --recursive
             --no-ignore
-            ./.src
+            --lockfile=./.src/cr-sqlite/core/rs/bundle_static/Cargo.lock
+            --lockfile=./.src/cr-sqlite/core/rs/bundle/Cargo.lock
 
   # ── Repo sweep: CVEs, secrets, workflow misconfig ───────────────────────────
   trivy:
@@ -140,10 +162,10 @@ jobs:
         # seen during build" (exit 32), because after the exclusion it had zero
         # files to analyze.
         #
-        # Upstream's Rust is not unscanned — cargo-audit and cargo-deny both run
-        # against .src/cr-sqlite/core/rs/{bundle_static,bundle} above (RUSTSEC, bans,
-        # licenses, sources), and osv-scanner sweeps .src/ recursively. Add
-        # `rust` back the moment this repo gains Rust of its own.
+        # Upstream's Rust is not unscanned — cargo-audit, cargo-deny AND
+        # osv-scanner all run against .src/cr-sqlite/core/rs/{bundle_static,bundle}
+        # above (RUSTSEC, bans, licenses, sources, OSV), which is the graph that
+        # ships. Add `rust` back the moment this repo gains Rust of its own.
         language: [c-cpp]
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
