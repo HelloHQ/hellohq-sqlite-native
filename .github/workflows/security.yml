@@ -26,10 +26,17 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Fetch pinned upstream (for Cargo.lock)
         run: bash build/fetch.sh
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2
+      # KNOWN WARNING (upstream's to fix, not ours): this action still declares
+      # `using: node20`, so runs log the Node-20 deprecation notice. v2.0.0 is
+      # the newest RELEASE and it is what this SHA pins; the fix (node24) exists
+      # only on the action's default branch, unreleased. We will not pin an
+      # untagged commit of a security-scanning action to silence a log line —
+      # the release boundary is the review boundary. GitHub already force-runs it
+      # on Node 24, so nothing is broken. Bump when rustsec tags a node24 release.
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: .src/cr-sqlite/core/rs/bundle
@@ -39,7 +46,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: bash build/fetch.sh
       - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2
         with:
@@ -58,7 +65,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - env:
           # sqlite3mc ships in the Windows release, so it belongs in the CVE
           # sweep even though only the Windows job compiles it.
@@ -72,8 +79,20 @@ jobs:
           # osv-scanner v2 removed the top-level `--skip-git` flag (it errored
           # with "flag provided but not defined"). `scan source` no longer walks
           # git history, so recursive directory scan is all we need.
+          #
+          # `--no-ignore` IS LOAD-BEARING, not cosmetic. osv-scanner honours
+          # .gitignore by default (`--use-gitignore`), and `/.src/` is gitignored
+          # (it is fetched, never committed) — so the scan walked into .src/,
+          # skipped every file as "ignored", and exited clean having found
+          # nothing. That is exactly what the run warned about:
+          #   "No lockfiles found. Please use the --allow-no-lockfiles flag..."
+          # The tree does contain lockfiles (e.g. cr-sqlite's
+          # core/rs/bundle/Cargo.lock), so the job was passing VACUOUSLY and
+          # provided zero CVE coverage of upstream. Do not remove this flag; if
+          # this warning ever returns, the sweep has gone blind again.
           scan-args: |-
             --recursive
+            --no-ignore
             ./.src
 
   # ── Repo sweep: CVEs, secrets, workflow misconfig ───────────────────────────
@@ -82,7 +101,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
@@ -114,14 +133,22 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y clang make tcl libssl-dev patchelf
       - run: bash build/fetch.sh
       - run: bash build/setup-rust.sh
-      - uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           languages: ${{ matrix.language }}
+          # We drive the compilers ourselves in the next step, so declare that.
+          # Left unset, the run warned: "Cannot build an overlay database because
+          # build-mode is set to 'undefined' instead of 'none'. Falling back to
+          # creating a normal full database instead." Stating `manual` makes the
+          # contract explicit — CodeQL traces our build-linux.sh rather than
+          # guessing — and fails loudly if that build ever stops compiling
+          # anything, instead of silently analysing an empty database.
+          build-mode: manual
           # Scope CodeQL to code this repo owns. autobuild compiles the FETCHED
           # upstream in .src/, so without this every SQLCipher/SQLite/cr-sqlite
           # finding lands here as ours and cannot be fixed (the tree is
@@ -130,7 +157,7 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
       - name: Build (so CodeQL can trace the compilers)
         run: bash build/build-linux.sh
-      - uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
 
   # ── Repo security posture (branch protection, pinned actions, etc.) ─────────
   scorecard:
@@ -141,9 +168,9 @@ jobs:
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with: { results_file: results.sarif, results_format: sarif }
-      - uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+      - uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with: { sarif_file: results.sarif }
