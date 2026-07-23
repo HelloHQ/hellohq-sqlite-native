@@ -31,7 +31,7 @@ crsqlite:
 # `PRAGMA key`. Real SQLCipher does NOT understand those pragmas, so the two are
 # not interchangeable at the consumer — see HelloHQ/hellohq#1074.
 #
-# ⚠️ VERSION LOCKSTEP: this must stay equal to the sqlite3mc amalgamation
+# IMPORTANT - VERSION LOCKSTEP: this must stay equal to the sqlite3mc amalgamation
 # vendored in the HelloHQ sqlite3.dart fork (third_party/sqlite3mc/, currently
 # "SQLite3 Multiple Ciphers 2.3.4" on SQLite 3.53.1), which is what Linux
 # compiles from. Windows loading a different sqlite3mc version would key and
