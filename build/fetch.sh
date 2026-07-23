@@ -19,7 +19,13 @@ val() { # val <top-section> <key>
 import sys
 lock, section, key = sys.argv[1], sys.argv[2], sys.argv[3]
 cur = None
-for raw in open(lock):
+# encoding="utf-8" is REQUIRED, not cosmetic: on Windows, Python defaults to the
+# locale codec (cp1252), which cannot decode multi-byte UTF-8 and raises
+# UnicodeDecodeError on any non-ASCII byte in this file. That made val() print
+# nothing, so clone_verify received an empty URL and git failed with the useless
+# "'origin' does not appear to be a git repository". Comments here are prose and
+# will keep acquiring em-dashes; decode them explicitly.
+for raw in open(lock, encoding="utf-8"):
     line = raw.rstrip("\n")
     if not line.strip() or line.lstrip().startswith("#"):
         continue
@@ -66,6 +72,14 @@ clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha>
 mkdir -p "${SRC}"
 clone_verify sqlcipher "$(val sqlcipher source)" "$(val sqlcipher tag)"  "$(val sqlcipher commit)"
 clone_verify cr-sqlite "$(val crsqlite source)"  ""                      "$(val crsqlite commit)"
+
+# SQLite3 Multiple Ciphers — opt-in, because only the Windows sqlite3mc job
+# needs it and it is a large clone (full SQLite sources). Every other platform
+# job would pay for it and never compile it.
+#   SQLITE3MC=1 bash build/fetch.sh
+if [ "${SQLITE3MC:-0}" = "1" ]; then
+  clone_verify sqlite3mc "$(val sqlite3mc source)" "$(val sqlite3mc tag)" "$(val sqlite3mc commit)"
+fi
 
 # Clear known RUSTSEC advisories in cr-sqlite's pinned Rust deps (lockfile bump)
 # so the security scan AND the shipped artifact are clean. Self-skips with no
