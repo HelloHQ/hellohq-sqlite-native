@@ -19,7 +19,13 @@ val() { # val <top-section> <key>
 import sys
 lock, section, key = sys.argv[1], sys.argv[2], sys.argv[3]
 cur = None
-for raw in open(lock):
+# encoding="utf-8" is REQUIRED, not cosmetic: on Windows, Python defaults to the
+# locale codec (cp1252), which cannot decode multi-byte UTF-8 and raises
+# UnicodeDecodeError on any non-ASCII byte in this file. That made val() print
+# nothing, so clone_verify received an empty URL and git failed with the useless
+# "'origin' does not appear to be a git repository". Comments here are prose and
+# will keep acquiring em-dashes; decode them explicitly.
+for raw in open(lock, encoding="utf-8"):
     line = raw.rstrip("\n")
     if not line.strip() or line.lstrip().startswith("#"):
         continue
