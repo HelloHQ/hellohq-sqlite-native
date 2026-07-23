@@ -99,7 +99,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [c-cpp, rust]
+        # c-cpp ONLY. There is no first-party Rust in this repo — every .rs file
+        # lives in the fetched upstream under .src/ (cr-sqlite), which the CodeQL
+        # config excludes. Keeping `rust` here made the job fail outright with
+        # "CodeQL could not process any code written in Rust / no source code
+        # seen during build" (exit 32), because after the exclusion it had zero
+        # files to analyze.
+        #
+        # Upstream's Rust is not unscanned — cargo-audit and cargo-deny both run
+        # against .src/cr-sqlite/core/rs/bundle above (RUSTSEC advisories, bans,
+        # licenses, sources), and osv-scanner sweeps .src/ recursively. Add
+        # `rust` back the moment this repo gains Rust of its own.
+        language: [c-cpp]
     steps:
       - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
         with: { egress-policy: audit }
