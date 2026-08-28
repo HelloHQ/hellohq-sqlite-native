@@ -33,10 +33,15 @@ crsqlite:
 #
 # IMPORTANT - VERSION LOCKSTEP: this must stay equal to the sqlite3mc amalgamation
 # vendored in the HelloHQ sqlite3.dart fork (third_party/sqlite3mc/, currently
-# "SQLite3 Multiple Ciphers 2.3.4" on SQLite 3.53.1), which is what Linux
-# compiles from. Windows loading a different sqlite3mc version would key and
-# format databases with different parameters than Linux/macOS. Bump both or
-# neither.
+# "SQLite3 Multiple Ciphers 2.3.4" on SQLite 3.53.1). A platform loading a
+# different sqlite3mc version would key and format databases with different
+# parameters than the others. Bump both or neither.
+#
+# Linux is now built HERE too, rather than compiled from that amalgamation by
+# package:sqlite3's build hook: the hook returns early unless the build requests
+# code assets, and `flutter build linux` does not, so the shipped Linux app
+# bundled no sqlite3 library at all. The fork's amalgamation remains the version
+# reference for this pin even though Linux no longer compiles from it.
 sqlite3mc:
   source: https://github.com/utelle/SQLite3MultipleCiphers
   tag:    v2.3.4

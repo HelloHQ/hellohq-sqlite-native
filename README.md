@@ -21,9 +21,9 @@ Per platform, **two libraries**:
 - `crsqlite.<dylib|so|dll>` — the cr-sqlite loadable extension (`crsql_*`
   functions, CRDT changesets).
 
-Plus, **on Windows only**, a third library:
+Plus, **on Windows and Linux**, a third library:
 
-- `sqlite3mc.dll` — a [SQLite3 Multiple Ciphers][mc] build of SQLite. This is a
+- `sqlite3mc.dll` / `libsqlite3mc.so` — a [SQLite3 Multiple Ciphers][mc] build of SQLite. This is a
   *different project* from SQLCipher, not a variant of it. It implements a
   SQLCipher-**compatible** cipher that is selected with `PRAGMA cipher =
   'sqlcipher'` + `PRAGMA legacy = 4` **before** `PRAGMA key`. Real SQLCipher
@@ -36,6 +36,16 @@ Plus, **on Windows only**, a third library:
   `source: sqlite3mc`. Shipping it here lets the app provision it through the
   same SHA-256 + SLSA trust gate as everything else, instead of downloading it
   from a third-party GitHub release while tests are starting.
+
+  **Linux was added for a sharper reason.** There the app was expected to
+  compile sqlite3mc itself, from the amalgamation vendored in the `sqlite3.dart`
+  fork. That never happens in a packaged build: the hook opens with
+  `if (!input.config.buildCodeAssets) return;`, and `flutter build linux` does
+  not request code assets. The shipped Linux app therefore bundled **no** sqlite3
+  library at all and resolved the distro `libsqlite3.so.0` — which has no
+  encryption codec, so `PRAGMA cipher` came back empty and the app refused to
+  open its database. Providing the artifact here removes Linux's dependence on a
+  mechanism that does not run.
 
 [mc]: https://github.com/utelle/SQLite3MultipleCiphers
 
@@ -62,11 +72,11 @@ SHA-256 and build attestation before use.
 |---|---|---|
 | SQLCipher | github.com/sqlcipher/sqlcipher | `v4.16.0` (commit-verified) |
 | cr-sqlite | github.com/superfly/cr-sqlite | commit-pinned (fork has no release tags) |
-| SQLite3 Multiple Ciphers | github.com/utelle/SQLite3MultipleCiphers | `v2.3.4` (commit-verified, Windows only) |
+| SQLite3 Multiple Ciphers | github.com/utelle/SQLite3MultipleCiphers | `v2.3.4` (commit-verified; Windows + Linux) |
 
 The sqlite3mc pin must stay in **lockstep** with the amalgamation vendored in the
-HelloHQ `sqlite3.dart` fork, which is what the app's Linux builds compile from.
-A version skew there would key and format databases differently per platform.
+HelloHQ `sqlite3.dart` fork. A version skew would key and format databases
+differently per platform.
 `fetch.sh` only clones it when `SQLITE3MC=1` — no other platform needs it.
 
 Bumping = edit `upstream.lock`; the build + security scan + contract gate runs on
