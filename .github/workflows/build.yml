@@ -68,6 +68,44 @@ jobs:
           name: linux-x64
           path: dist/linux-x64/*.so
 
+  # ── Linux x86_64 sqlite3mc — the Flutter app's SQLite on Linux ──────────────
+  # Separate from the `linux` job above, which builds SQLCipher + cr-sqlite for
+  # consumers on the SQLCipher-proper API. This one exists because the Flutter
+  # app cannot use that library: hellohq_db issues sqlite3mc-only pragmas
+  # (`PRAGMA cipher = 'sqlcipher'`, `PRAGMA legacy = 4`) that real SQLCipher
+  # rejects — tried on Windows, reverted in HelloHQ/hellohq a9735d15f.
+  #
+  # Until now the Linux app was expected to compile sqlite3mc itself through
+  # package:sqlite3's build hook. That hook returns early unless the build
+  # requests code assets, and `flutter build linux` does not — so the shipped
+  # Linux app bundled NO sqlite3 library and silently resolved the distro one,
+  # which has no encryption codec. Providing the artifact here puts Linux on the
+  # same provisioned, trust-gated footing as Windows and macOS.
+  #
+  # Cheap compared to the other legs: no Rust, no OpenSSL, no tcl.
+  linux-sqlite3mc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build patchelf
+      - name: Fetch + verify pinned upstream
+        env:
+          SQLITE3MC: '1'
+        run: bash build/fetch.sh
+      - name: Build sqlite3mc (clang + CMake)
+        run: bash build/build-linux-sqlite3mc.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-sqlite3mc
+          path: |
+            dist/linux-x64/libsqlite3mc.so
+            dist/linux-x64/sqlite3mc-include/**
+
   # ── Windows x86_64 — split build (cr-sqlite can't build natively on Windows) ─
   # SQLCipher: MSVC on windows-latest. cr-sqlite: mingw cross from Linux (its own
   # recipe). The `windows` job combines them + runs the contract test.
@@ -281,7 +319,7 @@ jobs:
 
   # ── Provenance: checksums + SBOM + SLSA attestation over all artifacts ──────
   provenance:
-    needs: [macos, linux, windows, ios, android]
+    needs: [macos, linux, linux-sqlite3mc, windows, ios, android]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
