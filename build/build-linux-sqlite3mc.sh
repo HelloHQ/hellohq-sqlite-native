@@ -119,27 +119,34 @@ done
 # at all — this is precisely the failure the Linux leg hit with the upstream
 # prebuilt, so gate on it here rather than at runtime.
 echo "▸ verifying export table"
-# Diagnostics first: an all-five-missing result almost always means the probe is
-# wrong, not the library, and without the actual symbol table there is no way to
-# tell those apart from a CI log.
-total="$(nm -D --defined-only "${OUT}/libsqlite3mc.so" 2>&1 | wc -l)"
-echo "    dynamic defined symbols: ${total}"
-echo "    sample sqlite3_* exports:"
-nm -D --defined-only "${OUT}/libsqlite3mc.so" 2>/dev/null | awk '{print $NF}' \
-  | grep '^sqlite3_' | head -10 | sed 's/^/      /' || echo "      (none)"
+# Read the dynamic symbol table ONCE into a variable, then match in pure bash.
+#
+# Do NOT pipe into `grep -q` here. Under `set -o pipefail` that is a false
+# NEGATIVE generator: grep -q exits the moment it matches, closing the pipe, so
+# nm/awk die with SIGPIPE (141) and pipefail reports the whole pipeline as
+# failed — meaning the check reports "missing" exactly when the symbol IS
+# present. The first run of this script hit that and declared all five required
+# symbols absent from a library that exports 410 of them.
+syms="$(nm -D --defined-only "${OUT}/libsqlite3mc.so" | awk '{print $NF}')"
+echo "    dynamic defined symbols: $(printf '%s\n' "${syms}" | wc -l)"
+
+has_symbol() { # <symbol> — exact whole-line match, no pipeline
+  case $'\n'"${syms}"$'\n' in
+    *$'\n'"$1"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 missing=()
 for sym in sqlite3_open sqlite3_key sqlite3_rekey \
            sqlite3_enable_load_extension sqlite3_load_extension; do
-  # -w so sqlite3_open is not satisfied by sqlite3_open_v2 ('_' is a word
-  # character, so there is no boundary between "open" and "_v2").
-  if ! nm -D --defined-only "${OUT}/libsqlite3mc.so" | awk '{print $NF}' \
-       | grep -qxF "${sym}"; then
-    missing+=("${sym}")
-  fi
+  # Exact match, so sqlite3_open is not satisfied by sqlite3_open_v2.
+  has_symbol "${sym}" || missing+=("${sym}")
 done
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "libsqlite3mc.so is missing required exports: ${missing[*]}" >&2
+  echo "exported sqlite3_* symbols were:" >&2
+  printf '%s\n' "${syms}" | grep '^sqlite3_' >&2 || true
   exit 1
 fi
 
@@ -148,10 +155,13 @@ fi
 # back to vanilla SQLite would export the symbols above and still leave
 # `PRAGMA cipher` empty — exactly the failure this replaces, only harder to see.
 echo "▸ verifying the MC codec is present"
-if ! nm -D --defined-only "${OUT}/libsqlite3mc.so" | grep -q 'sqlite3mc_'; then
-  echo "libsqlite3mc.so exports no sqlite3mc_* symbols — this is not a Multiple Ciphers build" >&2
-  exit 1
-fi
+case "${syms}" in
+  *sqlite3mc_*) ;;
+  *)
+    echo "libsqlite3mc.so exports no sqlite3mc_* symbols — this is not a Multiple Ciphers build" >&2
+    exit 1
+    ;;
+esac
 
 echo "✅ Linux x64 sqlite3mc artifact in ${OUT}:"
 ls -la "${OUT}/libsqlite3mc.so"
