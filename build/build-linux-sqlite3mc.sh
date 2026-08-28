@@ -119,6 +119,15 @@ done
 # at all — this is precisely the failure the Linux leg hit with the upstream
 # prebuilt, so gate on it here rather than at runtime.
 echo "▸ verifying export table"
+# Diagnostics first: an all-five-missing result almost always means the probe is
+# wrong, not the library, and without the actual symbol table there is no way to
+# tell those apart from a CI log.
+total="$(nm -D --defined-only "${OUT}/libsqlite3mc.so" 2>&1 | wc -l)"
+echo "    dynamic defined symbols: ${total}"
+echo "    sample sqlite3_* exports:"
+nm -D --defined-only "${OUT}/libsqlite3mc.so" 2>/dev/null | awk '{print $NF}' \
+  | grep '^sqlite3_' | head -10 | sed 's/^/      /' || echo "      (none)"
+
 missing=()
 for sym in sqlite3_open sqlite3_key sqlite3_rekey \
            sqlite3_enable_load_extension sqlite3_load_extension; do
