@@ -34,7 +34,7 @@ jobs:
       matrix:
         crate: [bundle_static, bundle]
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Fetch pinned upstream (for Cargo.lock)
@@ -59,11 +59,11 @@ jobs:
         # Same reasoning as cargo-audit: bundle_static is the crate that ships.
         crate: [bundle_static, bundle]
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: bash build/fetch.sh
-      - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           manifest-path: .src/cr-sqlite/core/rs/${{ matrix.crate }}/Cargo.toml
           # advisories = RUSTSEC; bans/licenses/sources = supply-chain allowlist.
@@ -78,7 +78,7 @@ jobs:
   osv-scanner:
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # No SQLITE3MC=1 here (unlike the Windows build). osv-scanner is a
@@ -92,7 +92,7 @@ jobs:
       # The runnable action lives in the osv-scanner-action SUBDIR; the repo-root
       # action.yml has no `runs:` section, which is why the bare
       # `google/osv-scanner-action@…` pin failed with "Top level 'runs:' …".
-      - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+      - uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
         with:
           # SCOPE = the lockfiles that GOVERN THE SHIPPED ARTIFACT, i.e. exactly
           # the crates cargo-audit/cargo-deny target above, for the same reason.
@@ -136,7 +136,7 @@ jobs:
   trivy:
     runs-on: ubuntu-latest
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -168,14 +168,14 @@ jobs:
         # ships. Add `rust` back the moment this repo gains Rust of its own.
         language: [c-cpp]
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install build deps
         run: sudo apt-get update && sudo apt-get install -y clang make tcl libssl-dev patchelf
       - run: bash build/fetch.sh
       - run: bash build/setup-rust.sh
-      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+      - uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           languages: ${{ matrix.language }}
           # We drive the compilers ourselves in the next step, so declare that.
@@ -194,7 +194,7 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
       - name: Build (so CodeQL can trace the compilers)
         run: bash build/build-linux.sh
-      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+      - uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
 
   # ── Repo security posture (branch protection, pinned actions, etc.) ─────────
   scorecard:
@@ -203,11 +203,11 @@ jobs:
       security-events: write
       id-token: write
     steps:
-      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with: { results_file: results.sarif, results_format: sarif }
-      - uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+      - uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with: { sarif_file: results.sarif }
