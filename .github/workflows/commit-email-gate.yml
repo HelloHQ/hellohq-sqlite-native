@@ -35,7 +35,11 @@ jobs:
     name: Committer identity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # Pinned by SHA like every other `uses:` in this repo — OSSF Scorecard's
+      # Pinned-Dependencies check flagged this one as the sole exception
+      # ("GitHub-owned GitHubAction not pinned by hash"). Same SHA the other
+      # workflows already use.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the range this job checks can start at any commit
           # already on the remote, and a shallow clone would not contain it.

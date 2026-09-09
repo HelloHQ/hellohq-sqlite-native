@@ -182,29 +182,44 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y clang make tcl libssl-dev patchelf
+      # Fetch, but do NOT build. test/contract.c includes "sqlite3.h" from the
+      # fetched tree, and an unresolved include costs extraction fidelity on the
+      # one file this job exists to analyse. The fetched tree itself is excluded
+      # by the config below, which build-mode: none makes effective — so this
+      # buys the header without buying upstream's findings.
       - run: bash build/fetch.sh
-      - run: bash build/setup-rust.sh
       - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: ${{ matrix.language }}
-          # We drive the compilers ourselves in the next step, so declare that.
-          # Left unset, the run warned: "Cannot build an overlay database because
-          # build-mode is set to 'undefined' instead of 'none'. Falling back to
-          # creating a normal full database instead." Stating `manual` makes the
-          # contract explicit — CodeQL traces our build-linux.sh rather than
-          # guessing — and fails loudly if that build ever stops compiling
-          # anything, instead of silently analysing an empty database.
-          build-mode: manual
-          # Scope CodeQL to code this repo owns. autobuild compiles the FETCHED
-          # upstream in .src/, so without this every SQLCipher/SQLite/cr-sqlite
-          # finding lands here as ours and cannot be fixed (the tree is
-          # re-fetched from a pinned commit each build). Upstream CVEs stay
-          # covered by osv-scanner/trivy/cargo-audit above. Rationale in full:
+          # build-mode: none, NOT manual — and this is the whole point.
+          #
+          # `paths-ignore` in the config below is only honoured "when you run the
+          # CodeQL actions on an interpreted language … or when you analyze a
+          # compiled language WITHOUT BUILDING THE CODE"; for a built analysis
+          # GitHub's docs say you must instead "specify appropriate build steps"
+          # to limit scope. This job built (build-mode: manual tracing
+          # build-linux.sh), so the exclusion was INERT from the day it was added
+          # — `.src/**` was analysed anyway, and three SQLCipher/SQLite findings
+          # sat open on the default branch for weeks looking like ours:
+          #   .src/sqlcipher/sqlite3.c            integer-multiplication-cast-to-long
+          #   .src/sqlcipher/tool/src-verify.c    toctou-race-condition
+          #   .src/sqlcipher/autosetup/jimsh0.c   toctou-race-condition
+          # all in fetched upstream we do not patch. The Rust half of the matrix
+          # had already shown the same seam from the other side: Rust defaults to
+          # build-mode none, so there the exclusion DID apply, left zero files,
+          # and the job failed with "no source code seen" (see the matrix
+          # comment above).
+          #
+          # Nothing is lost by not building. The only first-party C in this repo
+          # is test/contract.c, a single self-contained file; a traced build
+          # added no coverage of OUR code, only several minutes of native build
+          # and every upstream defect as a finding.
+          build-mode: none
+          # Scope CodeQL to code this repo owns. .src/ is FETCHED upstream
+          # (SQLCipher + cr-sqlite), pinned in upstream.lock and never committed,
+          # so a finding there is not actionable here. Upstream CVEs stay covered
+          # by osv-scanner/trivy/cargo-audit/cargo-deny above. Rationale in full:
           config-file: ./.github/codeql/codeql-config.yml
-      - name: Build (so CodeQL can trace the compilers)
-        run: bash build/build-linux.sh
       - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
 
   # ── Repo security posture (branch protection, pinned actions, etc.) ─────────

@@ -28,5 +28,20 @@ name: "hellohq-sqlite-native"
 # If a genuine upstream defect ever needs carrying locally, the repo already
 # supports *.patch files alongside upstream.lock — that is the supported route,
 # not editing the fetched tree in place.
+#
+# ── THIS FILE ONLY WORKS WITH `build-mode: none` ────────────────────────────
+#
+# `paths-ignore` is honoured "when you run the CodeQL actions on an interpreted
+# language … or when you analyze a compiled language WITHOUT BUILDING THE CODE".
+# For a BUILT analysis, GitHub's docs say scope must be limited by the build
+# steps instead — the filter below does nothing.
+#
+# This file was added alongside `build-mode: manual`, which builds. It was
+# therefore inert from the start: `.src/**` kept being analysed, and three
+# upstream SQLCipher/SQLite findings sat open on main for weeks as if they were
+# ours. security.yml now runs this language with `build-mode: none`, which is
+# what makes the line below take effect. Do NOT reintroduce a build step to that
+# job without also finding another way to scope it — the only first-party C here
+# is test/contract.c, so a build buys no coverage of our own code.
 paths-ignore:
   - '.src/**'
