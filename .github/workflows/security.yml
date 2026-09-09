@@ -72,7 +72,18 @@ jobs:
           # cr-sqlite first-party license clarifications) lives in the repo-root
           # deny.toml, not next to the fetched manifest. The action runs with the
           # workspace as CWD, so reference it relatively.
-          command-arguments: --config deny.toml
+          #
+          # `arguments`, NOT `command-arguments`. The action composes
+          #   cargo-deny --log-level L --manifest-path M <arguments> <command> <command-arguments>
+          # so `arguments` lands BEFORE the subcommand and `command-arguments`
+          # after it. `--config` is a GLOBAL cargo-deny option, and this bump
+          # (2.0.20 -> 2.1.1) is where a newer cargo-deny started rejecting it in
+          # the trailing position:
+          #   error: unexpected argument '--config' found
+          #   Usage: cargo-deny check <WHICH>...
+          # `--all-features` is repeated because setting `arguments` replaces the
+          # action's default rather than adding to it.
+          arguments: --all-features --config deny.toml
 
   # ── Known-CVE deps in the dependency graph that actually SHIPS ──────────────
   osv-scanner:
