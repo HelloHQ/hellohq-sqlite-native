@@ -27,6 +27,18 @@ OUT="${ROOT}/dist/android"
 API="${ANDROID_API:-24}"
 TOOLCHAIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64"
 
+# Android 15 runs 64-bit devices on 16 KB memory pages, and refuses to load a
+# shared library whose PT_LOAD segments are aligned to the old 4 KB page size.
+# NDK r26 still defaults to 4 KB (r27+ flipped the default), so every .so we
+# ship has to ask for it explicitly — this applies to BOTH libraries, not just
+# cr-sqlite: they are dlopen'd from the same jniLibs directory and either one
+# being misaligned bricks the app on a 16 KB device.
+#
+# Verified against NDK r26d: a trivial .so links at align 4096 without this
+# flag and 16384 with it. The assertion at the bottom of this script is what
+# actually keeps it true.
+PAGE16K_LDFLAG="-Wl,-z,max-page-size=16384"
+
 # ABI → (clang target triple, rust target)
 abi_clang_triple() { case "$1" in
   arm64-v8a)   echo "aarch64-linux-android${API}" ;;
@@ -62,7 +74,7 @@ build_abi() {
               -DSQLITE_EXTRA_INIT=sqlcipher_extra_init \
               -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown \
               -I${osl}/include" \
-      LDFLAGS="-L${osl}/lib -l:libcrypto.a -llog" >/dev/null   # -llog: SQLite/Android uses __android_log_*
+      LDFLAGS="-L${osl}/lib -l:libcrypto.a -llog ${PAGE16K_LDFLAG}" >/dev/null   # -llog: SQLite/Android uses __android_log_*
     make -j"$(nproc)" libsqlite3.so >/dev/null )
   cp "$(readlink -f "${SRC}/sqlcipher/libsqlite3.so")" "${out}/libsqlcipher.so"
   patchelf --set-soname libsqlcipher.so "${out}/libsqlcipher.so" 2>/dev/null || true
@@ -72,7 +84,8 @@ build_abi() {
   ( cd "${SRC}/cr-sqlite/core"
     make clean >/dev/null 2>&1 || true
     ANDROID_TARGET="${rust}" ANDROID_NDK_HOME="${ANDROID_NDK_HOME}" \
-      NDK_HOSTARCH=linux-x86_64 make loadable >/dev/null )
+      NDK_HOSTARCH=linux-x86_64 \
+      make SHARED_CFLAGS="${PAGE16K_LDFLAG}" loadable >/dev/null )
   # Android requires lib*.so naming (Gradle only packages/extracts lib*.so into
   # the APK's jniLibs), and the consumer dlopens it by name. Ship libcrsqlite.so.
   cp "${SRC}/cr-sqlite/core/dist/crsqlite.so" "${out}/libcrsqlite.so"
@@ -84,6 +97,43 @@ for abi in arm64-v8a armeabi-v7a x86_64; do build_abi "${abi}"; done
 # contract compile in the android-contract job can #include "sqlite3.h".
 cp "${SRC}/sqlcipher/sqlite3.h" "${OUT}/sqlite3.h"
 
-echo "✅ Android artifacts under ${OUT}:"
+# ── 16 KB page alignment gate ────────────────────────────────────────────────
+# A misaligned .so does not fail to build; it fails at dlopen on an Android 15
+# device, long after this repo has published and something downstream has pinned
+# it. v0.1.4 shipped all six libraries at 4 KB and nothing here noticed. So the
+# producer proves the property itself rather than leaving it to the consumer.
+#
+# Read PT_LOAD alignment straight out of the program headers with the NDK's own
+# readelf — already required by this script, so no new build dependency.
+READELF="${TOOLCHAIN}/bin/llvm-readelf"
+misaligned=0
+while IFS= read -r so; do
+  # Align is the final hex column of each LOAD line. Take the MINIMUM across
+  # segments, not the last one: they agree today, but one lagging segment is
+  # exactly the case worth catching.
+  align_dec=""
+  while read -r a; do
+    [ -n "$a" ] || continue
+    if [ -z "${align_dec}" ] || [ $(( a )) -lt "${align_dec}" ]; then align_dec=$(( a )); fi
+  done < <("${READELF}" --program-headers "${so}" \
+    | awk '/^ *LOAD/ { for (i = NF; i >= 1; i--) if ($i ~ /^0x[0-9a-fA-F]+$/) { print $i; break } }')
+  if [ -z "${align_dec}" ]; then
+    echo "❌ ${so}: no PT_LOAD segments found — not a shared library?" >&2
+    misaligned=1
+    continue
+  fi
+  if [ "${align_dec}" -lt 16384 ]; then
+    echo "❌ ${so}: PT_LOAD align ${align_dec} < 16384 (Android 15 will not dlopen this)" >&2
+    misaligned=1
+  else
+    echo "    ✓ $(basename "$(dirname "${so}")")/$(basename "${so}") align ${align_dec}"
+  fi
+done < <(find "${OUT}" -name '*.so' | sort)
+if [ "${misaligned}" -ne 0 ]; then
+  echo "❌ refusing to publish 4 KB-aligned Android libraries — see PAGE16K_LDFLAG above." >&2
+  exit 1
+fi
+
+echo "✅ Android artifacts under ${OUT} (all 16 KB aligned):"
 find "${OUT}" -name '*.so' | sed 's/^/    /'
 echo "ℹ️  capability contract runs on an emulator in CI (separate job)."
