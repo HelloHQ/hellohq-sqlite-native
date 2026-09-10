@@ -30,8 +30,10 @@ mkdir -p "${OUT}"
 # Apple toolchain + SDK (NOT the PATH clang, which may be Homebrew LLVM).
 CC="$(xcrun -f clang)"
 SDK="$(xcrun --show-sdk-path)"
-ARCHFLAGS="-arch ${ARCH} -isysroot ${SDK}"
-echo "▸ macOS/${ARCH} build · CC=${CC}"
+MACOS_MIN="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
+export MACOSX_DEPLOYMENT_TARGET="${MACOS_MIN}"
+ARCHFLAGS="-arch ${ARCH} -isysroot ${SDK} -mmacosx-version-min=${MACOS_MIN}"
+echo "▸ macOS/${ARCH} build · minimum=${MACOS_MIN} · CC=${CC}"
 
 # ── 1. SQLCipher → libsqlcipher.dylib (CommonCrypto codec) ───────────────────
 echo "▸ building SQLCipher (CommonCrypto codec)"
@@ -56,6 +58,18 @@ echo "▸ building cr-sqlite (loadable extension; Rust nightly)"
   make loadable >/dev/null            # native host build (no -Zbuild-std cross)
 )
 cp "${SRC}/cr-sqlite/core/dist/crsqlite.dylib" "${OUT}/crsqlite.dylib"
+
+# A local build on a newer Xcode otherwise inherits that SDK's deployment
+# version (for example macOS 26), producing a dylib that links with a warning
+# but cannot run on HelloHQ's macOS 14 minimum. Fail the producer build before
+# such an artifact can be packaged.
+for dylib in "${OUT}/libsqlcipher.dylib" "${OUT}/crsqlite.dylib"; do
+  actual_min="$(xcrun vtool -show-build "${dylib}" | awk '/minos/{print $2; exit}')"
+  if [ "${actual_min}" != "${MACOS_MIN}" ]; then
+    echo "❌ $(basename "${dylib}") targets macOS ${actual_min}; expected ${MACOS_MIN}" >&2
+    exit 1
+  fi
+done
 
 # ── 3. Contract test ─────────────────────────────────────────────────────────
 echo "▸ contract test (test/contract.c)"
