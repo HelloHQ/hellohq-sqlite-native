@@ -81,6 +81,24 @@ if [ "${SQLITE3MC:-0}" = "1" ]; then
   clone_verify sqlite3mc "$(val sqlite3mc source)" "$(val sqlite3mc tag)" "$(val sqlite3mc commit)"
 fi
 
+# Apply source patches to the fetched cr-sqlite tree (patches/*.patch). These
+# are our own security fixes to upstream code that has not yet released a fix —
+# each is a `git apply` against .src/cr-sqlite, so the SHIPPED artifact carries
+# the fix even though we vendor no source. --check first so a patch that no
+# longer applies (upstream moved under a pin bump) fails loudly here rather than
+# silently shipping unpatched. Order-independent; keep each patch self-contained.
+shopt -s nullglob
+for patch in "${ROOT}/patches/"*.patch; do
+  echo "▸ applying $(basename "${patch}") to cr-sqlite"
+  if ! git -C "${SRC}/cr-sqlite" apply --check "${patch}" 2>/dev/null; then
+    echo "❌ ${patch} does not apply to the pinned cr-sqlite tree — refusing to" >&2
+    echo "   build an unpatched artifact. Rebase the patch onto the pinned commit." >&2
+    exit 1
+  fi
+  git -C "${SRC}/cr-sqlite" apply "${patch}"
+done
+shopt -u nullglob
+
 # Clear known RUSTSEC advisories in cr-sqlite's pinned Rust deps (lockfile bump)
 # so the security scan AND the shipped artifact are clean. Self-skips with no
 # cargo (the SQLCipher-only build, which never compiles cr-sqlite).

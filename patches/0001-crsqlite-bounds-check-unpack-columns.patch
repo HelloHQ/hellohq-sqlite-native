@@ -1,0 +1,33 @@
+diff --git a/core/rs/core/src/pack_columns.rs b/core/rs/core/src/pack_columns.rs
+index a1f5bd7..2eee44d 100644
+--- a/core/rs/core/src/pack_columns.rs
++++ b/core/rs/core/src/pack_columns.rs
+@@ -125,6 +125,14 @@ pub enum ColumnValue {
+ pub fn unpack_columns(data: &[u8]) -> Result<Vec<ColumnValue>, ResultCode> {
+     let mut ret = vec![];
+     let mut buf = data;
++    // Reject an empty buffer before reading the column count. `get_u8` panics
++    // (bytes::panic_advance) on an empty buffer, and this extension is built
++    // `panic = abort`, so an untrusted caller could abort the whole process
++    // rather than get an error back. A genuine packed-columns blob always has
++    // at least the count byte.
++    if !buf.has_remaining() {
++        return Err(ResultCode::ABORT);
++    }
+     let num_columns = buf.get_u8();
+ 
+     for _i in 0..num_columns {
+@@ -134,6 +142,13 @@ pub fn unpack_columns(data: &[u8]) -> Result<Vec<ColumnValue>, ResultCode> {
+         let column_type_and_maybe_intlen = buf.get_u8();
+         let column_type = ColumnType::from_u8(column_type_and_maybe_intlen & 0x07);
+         let intlen = (column_type_and_maybe_intlen >> 3 & 0xFF) as usize;
++        // The width field is 5 bits (0..=31), but the get_int/get_uint reads
++        // below decode into an i64/u64 and assert nbytes <= 8 — a crafted width
++        // of 9..=31 panics (abort) instead of erroring. No genuine value packs
++        // into more than 8 bytes, so a larger width is malformed by definition.
++        if intlen > 8 {
++            return Err(ResultCode::ABORT);
++        }
+ 
+         match column_type {
+             Some(ColumnType::Blob) => {

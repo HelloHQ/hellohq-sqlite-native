@@ -1,0 +1,4 @@
+# ClusterFuzzLite project metadata. `helper.py` reads only `language`; c and c++
+# are equivalent to the toolchain. The fuzz target is C, but it is linked with
+# $CXX against $LIB_FUZZING_ENGINE per OSS-Fuzz's C guidance.
+language: c
