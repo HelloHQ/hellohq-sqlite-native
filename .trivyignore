@@ -1,0 +1,12 @@
+# Trivy ignore rules (auto-detected in the scan root).
+#
+# DS-0002 — "Specify a non-root USER in the Dockerfile".
+# The only Dockerfile here is .clusterfuzzlite/Dockerfile, which derives FROM
+# gcr.io/oss-fuzz-base/base-builder and builds fuzz targets AS ROOT: the
+# OSS-Fuzz toolchain writes to root-owned $SRC/$OUT/$WORK and build_fuzzers
+# invokes it as root, so a non-root USER breaks the build. It is a transient
+# CI builder, never a running service. (Path-scoping needs .trivyignore.yaml,
+# which this trivy version does not auto-read; the repo has no other Dockerfile,
+# so a bare ignore is equivalent here.)
+AVD-DS-0002
+DS-0002
