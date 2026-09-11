@@ -1,0 +1,13 @@
+# Trivy ignore rules (path-scoped). Auto-detected by trivy in the scan root.
+
+misconfigurations:
+  # DS-0002 — "Specify a non-root USER in the Dockerfile".
+  # Scoped to the ClusterFuzzLite build image only. It derives FROM
+  # gcr.io/oss-fuzz-base/base-builder, which builds fuzz targets AS ROOT: the
+  # OSS-Fuzz toolchain writes to root-owned $SRC/$OUT/$WORK and the build_fuzzers
+  # action invokes it as root. Adding a USER breaks that contract, and this image
+  # is a transient CI builder, never a running service. Not applied repo-wide.
+  - id: DS-0002
+    paths:
+      - ".clusterfuzzlite/Dockerfile"
+    statement: "OSS-Fuzz base-builder images build as root by design; non-root breaks the fuzz build."
