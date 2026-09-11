@@ -1,17 +1,13 @@
-# ClusterFuzzLite build image. Reuses the OSS-Fuzz base-builder toolchain
-# (clang + libFuzzer + sanitizers) and adds what THIS repo's build needs:
-# make/tcl for the SQLite amalgamation, and a rustup that build/setup-rust.sh
-# then points at cr-sqlite's pinned nightly (+ rust-src) — the same channel CI
-# uses, read from cr-sqlite's own rust-toolchain.toml so it never drifts.
-FROM gcr.io/oss-fuzz-base/base-builder:v1
+# ClusterFuzzLite build image. base-builder-rust = the OSS-Fuzz base-builder
+# toolchain (clang + libFuzzer + sanitizers, $CC/$CXX/$CFLAGS/$LIB_FUZZING_ENGINE)
+# plus a preinstalled rustup — so build/setup-rust.sh can add cr-sqlite's pinned
+# nightly (+ rust-src) with no curl|sh bootstrap. Pinned by digest.
+FROM gcr.io/oss-fuzz-base/base-builder-rust:v1@sha256:433319ea1a6bbea6c1db1915a5d385021908cc62026d9f0efda2270ef6060de3
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      make tcl curl ca-certificates && rm -rf /var/lib/apt/lists/*
-
-# rustup only; setup-rust.sh installs the exact pinned toolchain at build time.
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | sh -s -- -y --default-toolchain none --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
+# make + tcl for the SQLite amalgamation build; the C/Rust toolchains are in the
+# base image.
+RUN apt-get update && apt-get install -y --no-install-recommends make tcl \
+      && rm -rf /var/lib/apt/lists/*
 
 COPY . $SRC/hellohq-sqlite-native
 WORKDIR $SRC/hellohq-sqlite-native
