@@ -188,7 +188,7 @@ jobs:
       # by the config below, which build-mode: none makes effective — so this
       # buys the header without buying upstream's findings.
       - run: bash build/fetch.sh
-      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           languages: ${{ matrix.language }}
           # build-mode: none, NOT manual — and this is the whole point.
@@ -220,7 +220,7 @@ jobs:
           # so a finding there is not actionable here. Upstream CVEs stay covered
           # by osv-scanner/trivy/cargo-audit/cargo-deny above. Rationale in full:
           config-file: ./.github/codeql/codeql-config.yml
-      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
 
   # ── Repo security posture (branch protection, pinned actions, etc.) ─────────
   scorecard:
@@ -235,5 +235,5 @@ jobs:
         with: { persist-credentials: false }
       - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with: { results_file: results.sarif, results_format: sarif }
-      - uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with: { sarif_file: results.sarif }
