@@ -41,7 +41,7 @@ jobs:
         run: bash build/setup-rust.sh
       - name: Build (CommonCrypto) + contract test
         run: bash build/build-macos.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-arm64
           path: dist/macos-arm64/*.dylib
@@ -63,7 +63,7 @@ jobs:
         run: bash build/setup-rust.sh
       - name: Build + contract test
         run: bash build/build-linux.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-x64
           path: dist/linux-x64/*.so
@@ -99,7 +99,7 @@ jobs:
         run: bash build/fetch.sh
       - name: Build sqlite3mc (clang + CMake)
         run: bash build/build-linux-sqlite3mc.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-sqlite3mc
           path: |
@@ -126,7 +126,7 @@ jobs:
         env:
           OPENSSL_ROOT: C:/vcpkg/installed/x64-windows
         run: pwsh build/build-windows.ps1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: win-sqlcipher
           path: dist/windows-x64/*
@@ -145,7 +145,7 @@ jobs:
         run: bash build/setup-rust.sh x86_64-pc-windows-gnu
       - name: Build cr-sqlite (mingw cross)
         run: bash build/build-windows-crsqlite.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: win-crsqlite
           path: dist/windows-x64/*.dll   # crsqlite.dll + bundled mingw runtime
@@ -173,7 +173,7 @@ jobs:
       - name: Build sqlite3mc (MSVC + CMake)
         shell: pwsh
         run: pwsh build/build-windows-sqlite3mc.ps1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: win-sqlite3mc
           path: dist/windows-x64/sqlite3mc*
@@ -226,7 +226,7 @@ jobs:
           & "$out\contract-mc.exe" --sqlite3mc "$out\crsqlite.dll" $db
           if ($LASTEXITCODE -ne 0) { throw "sqlite3mc contract failed ($LASTEXITCODE)" }
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-x64
           path: |
@@ -246,7 +246,7 @@ jobs:
         run: bash build/setup-rust.sh aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
       - name: Build xcframeworks
         run: bash build/build-ios.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ios
           path: dist/ios
@@ -279,7 +279,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           OPENSSL_ANDROID: ${{ runner.temp }}/openssl-android
         run: bash build/build-android.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: android
           path: dist/android
@@ -350,7 +350,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release/*
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-bundle
           path: release
