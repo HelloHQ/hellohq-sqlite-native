@@ -30,9 +30,21 @@ unset RUSTUP_TOOLCHAIN
 
 # cr-sqlite core, static feature (no loadable-extension entry; core_init
 # auto-registers it into the embedded SQLite).
+#
+# --target is load-bearing, not cosmetic. ClusterFuzzLite exports
+#   RUSTFLAGS=--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers
+# at compile time (it is not set in the image, so inspecting the image shows
+# nothing). Without an explicit --target, cargo applies RUSTFLAGS to HOST
+# artifacts too, so the num-derive proc-macro is built with AddressSanitizer and
+# the uninstrumented rustc process cannot load it:
+#   error[E0463]: can't find crate for `num_derive`
+# With --target, RUSTFLAGS reach only target artifacts and build scripts and
+# proc-macros build clean — which is why cargo-fuzz always passes it. The output
+# directory moves under target/<triple>/ accordingly.
+RUST_TARGET="x86_64-unknown-linux-gnu"
 ( cd "${CORE}/rs/bundle_static" \
-    && cargo build --release --features static,omit_load_extension )
-RS_A="${CORE}/rs/bundle_static/target/release/libcrsql_bundle_static.a"
+    && cargo build --release --target "${RUST_TARGET}" --features static,omit_load_extension )
+RS_A="${CORE}/rs/bundle_static/target/${RUST_TARGET}/release/libcrsql_bundle_static.a"
 
 # SQLite amalgamation + cr-sqlite's core_init (mirrors the Makefile's
 # sqlite3-extra.c), compiled with the fuzzing sanitizer flags.
