@@ -17,11 +17,53 @@ cd "${ROOT}"
 bash build/fetch.sh
 bash build/setup-rust.sh
 
+# base-builder-rust exports RUSTUP_TOOLCHAIN (nightly-2025-09-05 in the pinned
+# image), and that env var outranks every other rustup override — including the
+# rust-toolchain.toml cr-sqlite ships next to bundle_static. So setup-rust.sh
+# installed cr-sqlite's pinned nightly (rustc 1.75) and cargo then ignored it and
+# built with the image's rustc 1.91, which fails at
+#   error[E0557]: feature has been removed — #![feature(concat_idents)]
+#   (removed in 1.90.0)
+# in sqlite3_capi. Unsetting it hands control back to rust-toolchain.toml, so the
+# fuzzer is built with the same toolchain as every other platform build here.
+unset RUSTUP_TOOLCHAIN
+
 # cr-sqlite core, static feature (no loadable-extension entry; core_init
 # auto-registers it into the embedded SQLite).
+#
+# --target is load-bearing, not cosmetic. ClusterFuzzLite exports
+#   RUSTFLAGS=--cfg fuzzing -Zsanitizer=address -Cdebuginfo=1 -Cforce-frame-pointers
+# at compile time (it is not set in the image, so inspecting the image shows
+# nothing). Without an explicit --target, cargo applies RUSTFLAGS to HOST
+# artifacts too, so the num-derive proc-macro is built with AddressSanitizer and
+# the uninstrumented rustc process cannot load it:
+#   error[E0463]: can't find crate for `num_derive`
+# With --target, RUSTFLAGS reach only target artifacts and build scripts and
+# proc-macros build clean — which is why cargo-fuzz always passes it. The output
+# directory moves under target/<triple>/ accordingly.
+#
+# -Zbuild-std rebuilds the standard library under the same sanitizer RUSTFLAGS,
+# so the whole Rust side is instrumented consistently instead of an instrumented
+# crate linked against a prebuilt, uninstrumented std. This mirrors cr-sqlite's
+# own recipe rather than inventing one — its Makefile has
+#   asan: rs_build_flags=--target x86_64-unknown-linux-gnu -Zbuild-std
+# and every Rust target there passes -Zbuild-std. It needs the rust-src component,
+# which build/setup-rust.sh already installs.
+#
+# CRSQLITE_COMMIT_SHA: rs/core/src/sha.rs reads it with core::env!() at compile
+# time, and cr-sqlite's Makefile exports it as `git rev-parse HEAD` on every Rust
+# library target. This script calls cargo directly and so bypassed that export:
+#   error: environment variable `CRSQLITE_COMMIT_SHA` not defined at compile time
+# .src/cr-sqlite is a real checkout of the pinned commit (build/fetch.sh), so this
+# is the same value the Makefile would produce. It is the only compile-time env!()
+# in cr-sqlite's Rust besides OUT_DIR, which cargo sets itself.
+RUST_TARGET="x86_64-unknown-linux-gnu"
+CRSQLITE_COMMIT_SHA="$(git -C "${ROOT}/.src/cr-sqlite" rev-parse HEAD)"
+export CRSQLITE_COMMIT_SHA
 ( cd "${CORE}/rs/bundle_static" \
-    && cargo build --release --features static,omit_load_extension )
-RS_A="${CORE}/rs/bundle_static/target/release/libcrsql_bundle_static.a"
+    && cargo build --release --target "${RUST_TARGET}" -Zbuild-std \
+         --features static,omit_load_extension )
+RS_A="${CORE}/rs/bundle_static/target/${RUST_TARGET}/release/libcrsql_bundle_static.a"
 
 # SQLite amalgamation + cr-sqlite's core_init (mirrors the Makefile's
 # sqlite3-extra.c), compiled with the fuzzing sanitizer flags.
