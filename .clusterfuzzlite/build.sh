@@ -41,9 +41,28 @@ unset RUSTUP_TOOLCHAIN
 # With --target, RUSTFLAGS reach only target artifacts and build scripts and
 # proc-macros build clean — which is why cargo-fuzz always passes it. The output
 # directory moves under target/<triple>/ accordingly.
+#
+# -Zbuild-std rebuilds the standard library under the same sanitizer RUSTFLAGS,
+# so the whole Rust side is instrumented consistently instead of an instrumented
+# crate linked against a prebuilt, uninstrumented std. This mirrors cr-sqlite's
+# own recipe rather than inventing one — its Makefile has
+#   asan: rs_build_flags=--target x86_64-unknown-linux-gnu -Zbuild-std
+# and every Rust target there passes -Zbuild-std. It needs the rust-src component,
+# which build/setup-rust.sh already installs.
+#
+# CRSQLITE_COMMIT_SHA: rs/core/src/sha.rs reads it with core::env!() at compile
+# time, and cr-sqlite's Makefile exports it as `git rev-parse HEAD` on every Rust
+# library target. This script calls cargo directly and so bypassed that export:
+#   error: environment variable `CRSQLITE_COMMIT_SHA` not defined at compile time
+# .src/cr-sqlite is a real checkout of the pinned commit (build/fetch.sh), so this
+# is the same value the Makefile would produce. It is the only compile-time env!()
+# in cr-sqlite's Rust besides OUT_DIR, which cargo sets itself.
 RUST_TARGET="x86_64-unknown-linux-gnu"
+CRSQLITE_COMMIT_SHA="$(git -C "${ROOT}/.src/cr-sqlite" rev-parse HEAD)"
+export CRSQLITE_COMMIT_SHA
 ( cd "${CORE}/rs/bundle_static" \
-    && cargo build --release --target "${RUST_TARGET}" --features static,omit_load_extension )
+    && cargo build --release --target "${RUST_TARGET}" -Zbuild-std \
+         --features static,omit_load_extension )
 RS_A="${CORE}/rs/bundle_static/target/${RUST_TARGET}/release/libcrsql_bundle_static.a"
 
 # SQLite amalgamation + cr-sqlite's core_init (mirrors the Makefile's
