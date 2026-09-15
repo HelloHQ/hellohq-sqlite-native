@@ -17,6 +17,17 @@ cd "${ROOT}"
 bash build/fetch.sh
 bash build/setup-rust.sh
 
+# base-builder-rust exports RUSTUP_TOOLCHAIN (nightly-2025-09-05 in the pinned
+# image), and that env var outranks every other rustup override — including the
+# rust-toolchain.toml cr-sqlite ships next to bundle_static. So setup-rust.sh
+# installed cr-sqlite's pinned nightly (rustc 1.75) and cargo then ignored it and
+# built with the image's rustc 1.91, which fails at
+#   error[E0557]: feature has been removed — #![feature(concat_idents)]
+#   (removed in 1.90.0)
+# in sqlite3_capi. Unsetting it hands control back to rust-toolchain.toml, so the
+# fuzzer is built with the same toolchain as every other platform build here.
+unset RUSTUP_TOOLCHAIN
+
 # cr-sqlite core, static feature (no loadable-extension entry; core_init
 # auto-registers it into the embedded SQLite).
 ( cd "${CORE}/rs/bundle_static" \
