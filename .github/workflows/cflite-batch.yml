@@ -1,8 +1,8 @@
 # ClusterFuzzLite — batch fuzzing on a schedule, building a corpus over time.
 name: cflite-batch
 on:
-  schedule:
-    - cron: '17 4 * * *'   # daily, off-peak
+  # CI-PAUSE 2026-10-13: schedule:
+  # CI-PAUSE 2026-10-13:   - cron: '17 4 * * *'   # daily, off-peak
   workflow_dispatch:
 permissions: read-all
 jobs:
