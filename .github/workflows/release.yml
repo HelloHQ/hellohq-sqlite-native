@@ -16,8 +16,8 @@
 name: release
 
 on:
-  push:
-    tags: ['v*']
+  # CI-PAUSE 2026-10-13: push:
+  # CI-PAUSE 2026-10-13:   tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
