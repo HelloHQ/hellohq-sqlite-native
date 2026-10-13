@@ -12,8 +12,8 @@ on:
   push:
     branches: [main]
   # CI-PAUSE 2026-10-13: pull_request:
-  schedule:
-    - cron: '23 5 * * 1'   # weekly, Monday — retroactive CVE re-scan
+  # CI-PAUSE 2026-10-13: schedule:
+  # CI-PAUSE 2026-10-13:   - cron: '23 5 * * 1'   # weekly, Monday — retroactive CVE re-scan
   workflow_dispatch:
 
 permissions:
