@@ -17,7 +17,7 @@ name: build
 on:
   push:
     branches: [main]
-  pull_request:
+  # CI-PAUSE 2026-10-13: pull_request:
   workflow_dispatch:
   workflow_call:   # so release.yml can reuse this matrix
 
