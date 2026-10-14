@@ -9,11 +9,11 @@
 name: security
 
 on:
-  # CI-PAUSE 2026-10-13: push:
-  # CI-PAUSE 2026-10-13:   branches: [main]
-  # CI-PAUSE 2026-10-13: # CI-PAUSE 2026-10-13: pull_request:
-  # CI-PAUSE 2026-10-13: # CI-PAUSE 2026-10-13: schedule:
-  # CI-PAUSE 2026-10-13: # CI-PAUSE 2026-10-13:   - cron: '23 5 * * 1'   # weekly, Monday — retroactive CVE re-scan
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 5 * * 1'   # weekly, Monday — retroactive CVE re-scan
   workflow_dispatch:
 
 permissions:
