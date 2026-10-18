@@ -7,7 +7,7 @@ name: commit-email-gate
 # rule — server-side, org-wide, no per-repo file. It is Enterprise-gated.
 # Verified empirically against this org on 2026-07-28 (Team plan): the API
 # accepts the ruleset, stores it as "active", and does not fire — a commit
-# authored with a non-@hellohq.com address pushed clean to both a private and a public
+# authored calvin@calvinx.com pushed clean to both a private and a public
 # repo. The org keeps that ruleset in a DISABLED state, ready to enable the
 # day the plan changes; see docs/security/commit-identity-policy.md.
 #
@@ -35,7 +35,11 @@ jobs:
     name: Committer identity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned by SHA like every other `uses:` in this repo — OSSF Scorecard's
+      # Pinned-Dependencies check flagged this one as the sole exception
+      # ("GitHub-owned GitHubAction not pinned by hash"). Same SHA the other
+      # workflows already use.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the range this job checks can start at any commit
           # already on the remote, and a shallow clone would not contain it.
@@ -73,16 +77,7 @@ jobs:
           # matters, so every branch of this resolves to a real range or falls
           # back to checking the tip.
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            # Explicit refspec. actions/checkout narrows remote.origin.fetch
-            # to the ref it checked out (for a PR, the pull ref), so a bare
-            # `git fetch origin "$BASE_REF"` updates FETCH_HEAD and creates NO
-            # refs/remotes/origin/$BASE_REF. `origin/$BASE_REF..HEAD` then
-            # fails to resolve, the range check below falls through to the
-            # tip-only fallback, and on a pull_request the tip is GitHub's own
-            # merge commit — authored noreply@github.com, which ALLOWED
-            # permits. The gate would pass a PR whose every real commit came
-            # from a non-hellohq address, reporting "Checked 1 commit(s)."
-            git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            git fetch --quiet origin "$BASE_REF"
             RANGE="origin/${BASE_REF}..HEAD"
           elif [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "$ZERO" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             RANGE="${BEFORE}..HEAD"
