@@ -44,7 +44,7 @@ jobs:
       id-token: write      # SLSA provenance signing
       attestations: write
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -58,7 +58,7 @@ jobs:
           fi
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { path: artifacts }
 
       - name: Assemble THIRD_PARTY_LICENSES
@@ -74,7 +74,7 @@ jobs:
         run: bash build/package-release.sh "${{ steps.ver.outputs.version }}"
 
       - name: Generate SBOM (syft) over the release set
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: release
           output-file: release/sbom.spdx.json
