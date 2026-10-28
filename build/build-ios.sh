@@ -59,19 +59,57 @@ lipo -create "${WORK}/sc-sim-arm64.dylib" "${WORK}/sc-sim-x86_64.dylib" -output 
 # ── 2. cr-sqlite: dynamic loadable dylib per slice. The Makefile's iOS path
 #       (IOS_TARGET) already links `dist/crsqlite.dylib` as a dynamic library;
 #       just re-stamp its install_name to @rpath. ─────────────────────────────
-echo "▸ cr-sqlite dynamic dylib slices"
-cr_slice() { # <ios-rust-target> <out.dylib>
+#
+#       Each slice also gets a dSYM, so App Store Connect can symbolicate a
+#       crash inside cr-sqlite (hellohq#584). The C side is compiled with -g and
+#       the Rust side with debug info kept in its objects. The Makefile compiles
+#       and links the C sources in one clang call, whose temporary objects are
+#       gone afterwards, so the dSYM is the one clang's driver writes next to
+#       the dylib during that call (a later dsymutil would miss the C half).
+#       `strip -S` then drops the debug map from the shipped dylib. Neither step
+#       changes the dylib's UUID, which is what ties it to its dSYM.
+echo "▸ cr-sqlite dynamic dylib slices (+ dSYMs)"
+cr_slice() { # <ios-rust-target> <out.dylib> <out.dSYM>
   ( cd "${SRC}/cr-sqlite/core"
     make clean >/dev/null 2>&1 || true
-    IOS_TARGET="$1" make loadable >/dev/null )
+    rm -rf dist/crsqlite.dylib.dSYM
+    IOS_TARGET="$1" CARGO_PROFILE_RELEASE_DEBUG=limited \
+      CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=off \
+      make loadable SHARED_CFLAGS=-g >/dev/null )
   local built="${SRC}/cr-sqlite/core/dist/crsqlite.dylib"
   install_name_tool -id @rpath/crsqlite.dylib "${built}"
+  rm -rf "$3"
+  [ -d "${built}.dSYM" ] || { echo "clang wrote no ${built}.dSYM" >&2; exit 1; }
+  cp -R "${built}.dSYM" "$3"
+  strip -S "${built}"
+  dsym_matches "${built}" "$3"
   cp "${built}" "$2"
 }
-cr_slice aarch64-apple-ios     "${WORK}/cr/device/crsqlite.dylib"
-cr_slice aarch64-apple-ios-sim "${WORK}/cr-sim-arm64.dylib"
-cr_slice x86_64-apple-ios      "${WORK}/cr-sim-x86_64.dylib"
+uuids() { dwarfdump --uuid "$1" | awk '{print $2}' | sort; }
+dsym_matches() { # <binary> <dSYM>: same UUID per arch, and real debug info
+  local dwarf
+  dwarf="$(find "$2/Contents/Resources/DWARF" -type f | head -1)"
+  [ -n "${dwarf}" ] && [ "$(uuids "$1")" = "$(uuids "${dwarf}")" ] \
+    || { echo "dSYM $2 does not match $1" >&2; exit 1; }
+  # grep -c, not -q: -q would stop reading early and, under pipefail, fail on
+  # dwarfdump's SIGPIPE.
+  [ "$(dwarfdump --debug-info "${dwarf}" | grep -c DW_TAG_compile_unit)" -gt 0 ] \
+    || { echo "dSYM $2 has no debug info" >&2; exit 1; }
+}
+mkdir -p "${WORK}/cr/device-dsym" "${WORK}/cr/sim-dsym"
+cr_slice aarch64-apple-ios     "${WORK}/cr/device/crsqlite.dylib" "${WORK}/cr/device-dsym/crsqlite.dylib.dSYM"
+cr_slice aarch64-apple-ios-sim "${WORK}/cr-sim-arm64.dylib"       "${WORK}/cr-sim-arm64.dylib.dSYM"
+cr_slice x86_64-apple-ios      "${WORK}/cr-sim-x86_64.dylib"      "${WORK}/cr-sim-x86_64.dylib.dSYM"
 lipo -create "${WORK}/cr-sim-arm64.dylib" "${WORK}/cr-sim-x86_64.dylib" -output "${WORK}/cr/sim/crsqlite.dylib"
+# The fat simulator dylib's dSYM: the arm64 bundle with both archs' DWARF.
+SIM_DSYM="${WORK}/cr/sim-dsym/crsqlite.dylib.dSYM"
+cp -R "${WORK}/cr-sim-arm64.dylib.dSYM" "${SIM_DSYM}"
+rm "${SIM_DSYM}/Contents/Resources/DWARF/"*
+lipo -create \
+  "$(find "${WORK}/cr-sim-arm64.dylib.dSYM/Contents/Resources/DWARF" -type f | head -1)" \
+  "$(find "${WORK}/cr-sim-x86_64.dylib.dSYM/Contents/Resources/DWARF" -type f | head -1)" \
+  -output "${SIM_DSYM}/Contents/Resources/DWARF/crsqlite.dylib"
+dsym_matches "${WORK}/cr/sim/crsqlite.dylib" "${SIM_DSYM}"
 
 # ── 3. Assemble dynamic xcframeworks (device slice + fat simulator slice) ─────
 echo "▸ assembling dynamic xcframeworks"
@@ -80,9 +118,13 @@ xcodebuild -create-xcframework \
   -library "${WORK}/sc/device/libsqlcipher.dylib" \
   -library "${WORK}/sc/sim/libsqlcipher.dylib" \
   -output  "${OUT}/libsqlcipher.xcframework" >/dev/null
+# -debug-symbols needs an absolute path; each slice keeps its dSYM under
+# <slice>/dSYMs/, where hellohq's framework wrap and Xcode's archive find it.
 xcodebuild -create-xcframework \
   -library "${WORK}/cr/device/crsqlite.dylib" \
+  -debug-symbols "${WORK}/cr/device-dsym/crsqlite.dylib.dSYM" \
   -library "${WORK}/cr/sim/crsqlite.dylib" \
+  -debug-symbols "${SIM_DSYM}" \
   -output  "${OUT}/crsqlite.xcframework" >/dev/null
 
 echo "✅ iOS dynamic xcframeworks in ${OUT}:"
