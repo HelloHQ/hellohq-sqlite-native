@@ -6,20 +6,33 @@
 # Bumping an upstream = edit a value below. The build + security-scan + contract
 # gate runs on the PR. Crypto/DB bumps require human approval (never auto-merge).
 #
-# sha256/signature are verified in CI before the source is used.
+# Each source carries two pins, and build/fetch.sh (openssl: build/openssl-android.sh)
+# refuses the source unless both match:
+#   commit:      the git commit id (SHA-1), fetched exactly;
+#   tree_sha256: SHA-256 over the content of every file in that commit's tree,
+#                submodules included where they are built (build/tree-sha256.py).
+#                Read from git's object store, so it is the same on every OS.
+# The second pin keeps crypto sources from resting on SHA-1 alone
+# (HelloHQ/hellohq-sqlite-native#20). Bumping a pin: change `commit:`, run the
+# fetch, review the upstream diff, then copy the "got" value it prints into
+# `tree_sha256:`.
 
 sqlcipher:
   source: https://github.com/sqlcipher/sqlcipher
   tag:    v4.16.0
   # SQLCipher is distributed via git (no stable signed tarball). Verification =
-  # the resolved commit of the tag must equal this immutable SHA.
+  # the resolved commit of the tag must equal this SHA, and its tree must hash
+  # to tree_sha256.
   commit: e2a6040f2ae5cfff2b3e08eb3320007d93cdf3fc
+  tree_sha256: 17396e27062194b3839f64e623be49b0111cff404aba213d5533caa7f6cff5cf
 
 crsqlite:
   source: https://github.com/superfly/cr-sqlite
   # The superfly fork publishes no release tags — pin the exact commit.
+  # tree_sha256 covers the submodules too (core/rs/sqlite-rs-embedded).
   ref:    HEAD
   commit: 3133cacac0177ff11a2022a5ebd08f17749559f5
+  tree_sha256: 3c8d7294a619f0ee491318b115702260f562849c601b90b18a97be0c4601b84a
 
 # SQLite3 Multiple Ciphers — a SEPARATE library from SQLCipher above, not a
 # variant of it. It implements a SQLCipher-*compatible* cipher (`PRAGMA cipher =
@@ -46,14 +59,21 @@ sqlite3mc:
   source: https://github.com/utelle/SQLite3MultipleCiphers
   tag:    v2.3.4
   # Annotated tag → this is the COMMIT it dereferences to (fetch.sh pins by SHA).
+  # fetch.sh clones this tree rather than downloading a release asset, so
+  # tree_sha256 hashes what is actually built, not a release checksum.
   commit: 04a7a56392d77fc46007f0023d3eb4b5b701474b
+  tree_sha256: d4a78ed68e43e89c452a26ae8491d5253ba31639e73a4e6db7155d294242fd32
 
 # OpenSSL — SQLCipher's crypto provider on Android (built static, per ABI) and
 # linked on Linux/Windows. Apple uses CommonCrypto and pulls NO OpenSSL.
 openssl:
   source: https://github.com/openssl/openssl
   tag:    openssl-3.5.7
+  # build/openssl-android.sh clones this tree rather than downloading the
+  # release tarball, so tree_sha256 hashes what is actually built. Its
+  # submodules (test and fuzz suites) are not fetched and count by commit id.
   commit: 8cf17aaeb4599f8af87fefd810b5b5fee90fe69e
+  tree_sha256: c1ecf166a45285b6972c4b801fd99b976e582752b7f6ecaaced66e5612297ba6
 
 # Crypto provider for SQLCipher (per platform):
 #   Apple (iOS/macOS) → CommonCrypto (system; no bundled lib, no extra license)

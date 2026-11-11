@@ -6,7 +6,7 @@ changesets), for **macOS, Linux, Windows, iOS, Android**.
 
 This repo contains **no upstream source** — only pinned versions
 (`upstream.lock`), build scripts, optional `*.patch` files, and CI. Upstream is
-fetched and verified (by commit SHA) at build time. Builds run on free GitHub
+fetched and verified (by commit id and a SHA-256 of the fetched tree) at build time. Builds run on free GitHub
 Actions runners.
 
 > License: Apache-2.0 (this repo's own code). Bundled components keep their own
@@ -70,9 +70,14 @@ SHA-256 and build attestation before use.
 
 | Component | Source | Pin |
 |---|---|---|
-| SQLCipher | github.com/sqlcipher/sqlcipher | `v4.16.0` (commit-verified) |
-| cr-sqlite | github.com/superfly/cr-sqlite | commit-pinned (fork has no release tags) |
-| SQLite3 Multiple Ciphers | github.com/utelle/SQLite3MultipleCiphers | `v2.3.4` (commit-verified; Windows + Linux) |
+| SQLCipher | github.com/sqlcipher/sqlcipher | `v4.16.0` (commit + tree SHA-256) |
+| cr-sqlite | github.com/superfly/cr-sqlite | commit + tree SHA-256, submodules included (fork has no release tags) |
+| SQLite3 Multiple Ciphers | github.com/utelle/SQLite3MultipleCiphers | `v2.3.4` (commit + tree SHA-256; Windows + Linux) |
+| OpenSSL | github.com/openssl/openssl | `openssl-3.5.7` (commit + tree SHA-256; Android, via `build/openssl-android.sh`) |
+
+Each source must match both its `commit:` (a SHA-1 id) and its `tree_sha256:`, a
+SHA-256 over every file's content computed by `build/tree-sha256.py` from git's
+object store (the same on every OS). The fetch refuses a source that lacks either.
 
 The sqlite3mc pin must stay in **lockstep** with the amalgamation vendored in the
 HelloHQ `sqlite3.dart` fork. A version skew would key and format databases

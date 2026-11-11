@@ -45,6 +45,19 @@ if [ ! -d "${SRC}/.git" ]; then
   [ "${got}" = "${commit}" ] || { echo "❌ openssl commit mismatch: ${got}" >&2; exit 1; }
 fi
 
+# SHA-256 of the tree's content, so the pin does not rest on the SHA-1 commit id
+# alone (HelloHQ/hellohq-sqlite-native#20). Checked on every run, including a
+# reused .src/openssl. No --submodules: OpenSSL's submodules (test and fuzz
+# corpora, external test suites) are never fetched or built here, so each
+# counts by its recorded commit id only.
+pinned_tree="$(val openssl tree_sha256)"
+[[ "${pinned_tree}" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "❌ openssl: upstream.lock has no valid tree_sha256" >&2; exit 1; }
+tree="$(python3 "${ROOT}/build/tree-sha256.py" "${SRC}")"
+[ "${tree}" = "${pinned_tree}" ] || {
+  echo "❌ openssl tree SHA-256 mismatch: got ${tree}, pinned ${pinned_tree}" >&2; exit 1; }
+echo "  ✅ openssl tree sha256 ${tree:0:16}…"
+
 abi_target() { case "$1" in
   arm64-v8a)   echo android-arm64 ;;
   armeabi-v7a) echo android-arm ;;

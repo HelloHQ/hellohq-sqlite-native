@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# fetch.sh — fetch pinned upstream sources into .src/ and VERIFY commit SHAs.
+# fetch.sh — fetch pinned upstream sources into .src/ and VERIFY them.
 #
 # No upstream source is committed to this repo; this script materializes it at
-# build time from upstream.lock. Both SQLCipher and cr-sqlite are git-only, so
-# verification = the resolved commit must equal the pinned immutable SHA.
+# build time from upstream.lock. Every source is fetched from git, so
+# verification is two checks, and both must pass:
+#   1. the resolved commit must equal the pinned `commit:` (a SHA-1 id), and
+#   2. the SHA-256 of the fetched tree's content (build/tree-sha256.py, which
+#      hashes every file's bytes, submodules included where they are built)
+#      must equal the pinned `tree_sha256:`. This keeps the pin from resting on
+#      SHA-1 alone (HelloHQ/hellohq-sqlite-native#20).
+#
+# Bumping a pin: change `commit:`, run this script, review the upstream diff,
+# then copy the "got" value from the tree_sha256 mismatch into `tree_sha256:`.
 #
 # Usage: bash build/fetch.sh   (sets up .src/sqlcipher and .src/cr-sqlite)
 set -euo pipefail
@@ -40,10 +48,15 @@ for raw in open(lock, encoding="utf-8"):
 PY
 }
 
-clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha>
-  local name="$1" url="$2" ref="$3" pinned="$4"  # ref is unused (we pin by SHA)
+clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha> <pinned_tree_sha256>
+  local name="$1" url="$2" ref="$3" pinned="$4" pinned_tree="$5"  # ref is unused (we pin by SHA)
   local dir="${SRC}/${name}"
   echo "▸ ${name}: ${url} @ ${pinned:0:12}"
+  if ! [[ "${pinned_tree}" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "❌ ${name}: upstream.lock has no valid tree_sha256 — refusing to fetch a" >&2
+    echo "   source pinned by SHA-1 only." >&2
+    exit 1
+  fi
   rm -rf "${dir}"
   # Fetch exactly the pinned commit (GitHub allows fetching an arbitrary SHA),
   # then check it out. No fallbacks that could leave us on the wrong commit.
@@ -66,19 +79,26 @@ clone_verify() { # clone_verify <name> <url> <ref> <pinned_sha>
     -c url."https://github.com/".insteadOf="git@github.com:" \
     -c url."https://github.com/".insteadOf="ssh://git@github.com/" \
     submodule update --init --recursive
-  echo "  ✅ verified ${got}"
+  # SHA-256 of the content, submodules included (they are compiled). Computed
+  # before any patch below touches the tree.
+  local tree; tree="$(python3 "${SCRIPT_DIR}/tree-sha256.py" --submodules "${dir}")"
+  if [ "${tree}" != "${pinned_tree}" ]; then
+    echo "❌ ${name}: tree SHA-256 mismatch — got ${tree}, pinned ${pinned_tree}" >&2
+    exit 1
+  fi
+  echo "  ✅ verified ${got} (tree sha256 ${tree:0:16}…)"
 }
 
 mkdir -p "${SRC}"
-clone_verify sqlcipher "$(val sqlcipher source)" "$(val sqlcipher tag)"  "$(val sqlcipher commit)"
-clone_verify cr-sqlite "$(val crsqlite source)"  ""                      "$(val crsqlite commit)"
+clone_verify sqlcipher "$(val sqlcipher source)" "$(val sqlcipher tag)"  "$(val sqlcipher commit)" "$(val sqlcipher tree_sha256)"
+clone_verify cr-sqlite "$(val crsqlite source)"  ""                      "$(val crsqlite commit)"  "$(val crsqlite tree_sha256)"
 
 # SQLite3 Multiple Ciphers — opt-in, because only the Windows sqlite3mc job
 # needs it and it is a large clone (full SQLite sources). Every other platform
 # job would pay for it and never compile it.
 #   SQLITE3MC=1 bash build/fetch.sh
 if [ "${SQLITE3MC:-0}" = "1" ]; then
-  clone_verify sqlite3mc "$(val sqlite3mc source)" "$(val sqlite3mc tag)" "$(val sqlite3mc commit)"
+  clone_verify sqlite3mc "$(val sqlite3mc source)" "$(val sqlite3mc tag)" "$(val sqlite3mc commit)" "$(val sqlite3mc tree_sha256)"
 fi
 
 # Apply source patches to the fetched cr-sqlite tree (patches/*.patch). These
