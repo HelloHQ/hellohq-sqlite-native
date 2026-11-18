@@ -226,6 +226,44 @@ jobs:
           & "$out\contract-mc.exe" --sqlite3mc "$out\crsqlite.dll" $db
           if ($LASTEXITCODE -ne 0) { throw "sqlite3mc contract failed ($LASTEXITCODE)" }
 
+      # S4: sign the shipped libraries here, where they are built, with the
+      # credentials from the hellohq-release Doppler project. The consuming app
+      # verifies signatures instead of holding release secrets.
+      - name: Authenticode-sign the published libraries
+        shell: pwsh
+        env:
+          DOPPLER_TOKEN_RELEASE: ${{ secrets.DOPPLER_TOKEN_RELEASE }}
+        run: |
+          $names = @('AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET',
+                     'TRUSTED_SIGNING_ENDPOINT', 'TRUSTED_SIGNING_ACCOUNT',
+                     'TRUSTED_SIGNING_CERT_PROFILE')
+          if (-not $env:DOPPLER_TOKEN_RELEASE) {
+            Write-Host 'S4: no DOPPLER_TOKEN_RELEASE (forks, PRs); libraries stay unsigned.'
+            exit 0
+          }
+          # Doppler's REST API rather than the CLI: this repo does not install
+          # the CLI, and a signing step must not depend on it being present.
+          foreach ($n in $names) {
+            $uri = "https://api.doppler.com/v3/configs/config/secret?project=hellohq-release&config=stg&name=$n"
+            try {
+              $r = Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "Bearer $env:DOPPLER_TOKEN_RELEASE" } -ErrorAction Stop
+            } catch {
+              throw "S4: cannot read $n from hellohq-release/stg; cannot sign the release libraries. $_"
+            }
+            $v = $r.value.raw
+            if ([string]::IsNullOrEmpty($v)) { $v = $r.value.computed }
+            if ([string]::IsNullOrEmpty($v)) {
+              throw "S4: $n is empty in hellohq-release/stg; cannot sign the release libraries"
+            }
+            [Environment]::SetEnvironmentVariable($n, [string]$v, 'Process')
+          }
+            [Environment]::SetEnvironmentVariable($n, [string]$v, 'Process')
+          }
+          # Fail loudly: a release artifact that is not signed is a defect, not a
+          # staging nicety.
+          pwsh scripts/sign-windows-authenticode.ps1 -Path (Join-Path $PWD 'dist\windows-x64')
+          pwsh scripts/sign-windows-authenticode.ps1 -VerifyOnly -Path (Join-Path $PWD 'dist\windows-x64')
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-x64
